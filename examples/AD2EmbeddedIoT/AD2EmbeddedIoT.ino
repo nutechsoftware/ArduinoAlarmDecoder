@@ -48,12 +48,12 @@
 // Connect the AD2* TX PIN to ESP32 RX PIN and AD2* RX PIN to ESP32 TX PIN
 #ifdef HW_ESP32_EVB_EA
  // Use UART2 on ESP32
- #define USE_ESP32_UART2
+ //#define USE_ESP32_UART2
  #ifndef USE_ESP32_UART2
   #warning Using ESP32 software uart on AD2TX->UEXT:RXD(4):GPIO4 UEXT:TXD(3):GPIO36->AD2RX
   // UEXT TXD(3)/RXD(4) are on not connected to the ESP32 hardware UART.
-  #define AD2_TX 4  // UEXT PIN 5
-  #define AD2_RX 36 // UEXT PIN 6
+  #define AD2_TX 4  // UEXT PIN 4
+  #define AD2_RX 36 // UEXT PIN 3
  #else
   #warning Using ESP32 hardware uart AD2TX->UEXT:SCL(5):GPIO16 UEXT:SSEL(10):GPIO17->AD2RX
   #define AD2_TX 16 // UEXT PIN  5
@@ -177,6 +177,11 @@ void setup()
 
   // Open AlarmDecoder UART
   Serial2.begin(AD2_BAUD, SERIAL_8N1, AD2_TX, AD2_RX);
+  // The ESP32 uart driver has its own interrupt and buffers for processing
+  // rx bytes. Give it plenty of space. 1024 gave about 1 minute storage of
+  // normal messages from AD2 on Vista 50PUL panel with one partition.
+  // If any loop() method is busy too long alarm panel state data will be lost.
+  Serial2.setRxBufferSize(2048);
 
 #ifdef EN_ETH
   // Start ethernet
