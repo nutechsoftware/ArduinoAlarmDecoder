@@ -23,7 +23,7 @@
  */
 
 // AlarmDecoder arduino parsing state machine.
-// https://github.com/nutechsoftware/alarmdecoder-arduino
+// https://github.com/nutechsoftware/ArduinoAlarmDecoder
 #include <ArduinoAlarmDecoder.h>
 
 /**
@@ -48,7 +48,7 @@
 // Connect the AD2* TX PIN to ESP32 RX PIN and AD2* RX PIN to ESP32 TX PIN
 #ifdef HW_ESP32_EVB_EA
  // Use UART2 on ESP32
- //#define USE_ESP32_UART2
+ #define USE_ESP32_UART2
  #ifndef USE_ESP32_UART2
   #warning Using ESP32 software uart on AD2TX->UEXT:RXD(4):GPIO4 UEXT:TXD(3):GPIO36->AD2RX
   // UEXT TXD(3)/RXD(4) are on not connected to the ESP32 hardware UART.
