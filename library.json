@@ -1,0 +1,17 @@
+{
+    "name": "ArduinoAlarmDecoder",
+    "keywords": "alarmdecoder, ad2pi, ad2phat, rest, ssdp, mqtt, arduino, esp32",
+    "description": "A parsing and state machine processing library for AlarmDecoder devices.",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/nutechsoftware/ArduinoAlarmDecoder.git"
+    },
+    "version": "1.0",
+    "exclude": "tests",
+    "examples": "examples/*/*.ino",
+    "frameworks": "arduino",
+    "platforms": [
+        "atmelavr",
+        "espressif"
+    ]
+}
