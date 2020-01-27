@@ -31,8 +31,8 @@
  * 
  * Inside of the Arduino  IDE create a new TAB and call it secrets.h
  * Next add the next two lines to this file and save the file.
-#define SECRET_SSID "Your SSID Here"
-#define SECRET_PASS "Your PASSWORD here"
+ * #define SECRET_WIFI_SSID "Your SSID Here"
+ * #define SECRET_WIFI_PASS "Your PASSWORD here"
  */
 #include "secrets.h"
 
@@ -91,9 +91,10 @@
  */
 #ifdef EN_WIFI
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 /// WIFI Constants
-const char* ssid        = SECRET_SSID;
-const char* password    = SECRET_PASS;
+const char* wifi_ssid    = SECRET_WIFI_SSID;
+const char* wifi_pass    = SECRET_WIFI_PASS;
 #endif // EN_WIFI
 
 
@@ -111,7 +112,6 @@ const char* password    = SECRET_PASS;
  
 // used by both Ethernet and Wifi arduino drivers
 const char* host_name   = "AD2ESP32";
-WiFiClient espClient;
 static bool eth_connected = false;
 static bool wifi_connected = false;
 
@@ -149,14 +149,16 @@ AlarmDecoderParser AD2Parse;
 #define MQTT_CONNECT_RETRY_INTERVAL 5000   // every 5 seconds
 #define MQTT_CONNECT_PING_INTERVAL 60000   // every 60 seconds
 
-// MQTT Constants
-const char* mqtt_server = "test.mosquitto.org";
-//const char* mqtt_server = "5.196.95.208";
-
 // MQTT globals
-PubSubClient mqttClient(espClient);
+#if defined(SECRET_MQTT_SERVER) && defined(SECRET_MQTT_SERVER_CERT)
+WiFiClientSecure mqttnetClient;
+#elif defined(SECRET_MQTT_SERVER)
+WiFiClient mqttnetClient;
+#else
+#error select an MQTT server profile from secrets.h
+#endif
+PubSubClient mqttClient(mqttnetClient);
 String mqtt_clientId;
-
 #endif // EN_MQTT_CLIENT
 
 
@@ -197,16 +199,18 @@ void setup()
   // Start wifi
   WiFi.disconnect(true);
   WiFi.onEvent(networkEvent);
-  WiFi.begin(ssid, password);
+  WiFi.begin(wifi_ssid, wifi_pass);
 #endif
 
 #ifdef EN_MQTT_CLIENT
+#ifdef SECRET_MQTT_SERVER_CERT
+#endif
   mqttSetup();
 #endif
 
   // AlarmDecoder wiring.
-  AD2Parse.setCB_ON_RAW_MESSAGE(my_ON_RAW_MESSAGE_CB);
-
+  AD2Parse.setCB_ON_MESSAGE(my_ON_MESSAGE_CB);
+  AD2Parse.setCB_ON_LRR(my_ON_LRR_CB);
 }
 
 /**
@@ -350,7 +354,14 @@ void networkEvent(WiFiEvent_t event)
 void mqttSetup() {
   mqtt_clientId = "AD2ESP32Client-";
   mqtt_clientId += String(random(0xffff), HEX);
-  mqttClient.setServer(mqtt_server, 1883);
+  mqttClient.setServer(SECRET_MQTT_SERVER, SECRET_MQTT_PORT);
+#ifdef SECRET_MQTT_SERVER_CERT
+  /* set SSL/TLS certificate */
+  mqttnetClient.setCACert(SECRET_MQTT_SERVER_CERT);
+  // FIXME: client certificates.
+  /// client.setCertificate
+  /// client.setPrivateKey
+#endif
 }
 
 /**
@@ -362,10 +373,10 @@ bool mqttConnect() {
   if(!mqttClient.connected()) {
     Serial.print("!DBG:AD2EMB,MQTT connection starting...");
     // Attempt to connect
-    if (mqttClient.connect(mqtt_clientId.c_str())) {
+    if (mqttClient.connect(mqtt_clientId.c_str(), SECRET_MQTT_USER, SECRET_MQTT_PASS)) {
       Serial.println("connected");
       mqttClient.subscribe("AD2LRR");
-      mqttClient.publish("AD2LRR", "!LRR:008,1,CID_3123,ff");
+      mqttClient.publish(SECRET_MQTT_ROOT_TOPIC "AD2LRR", "!LRR:008,1,CID_3123,ff");
     } else {
       Serial.print(" failed, client.connect() rc=");
       Serial.println(mqttClient.state());
@@ -404,7 +415,8 @@ void mqttLoop(uint32_t tlaps) {
     } else {
       if (!mqtt_signon_sent) {
         Serial.println("!DBG:AD2EMB,MQTT publish AD2LRR:TEST");
-        mqttClient.publish("AD2LRR", "!LRR:008,1,CID_1123,ff");
+        mqttClient.publish(SECRET_MQTT_ROOT_TOPIC "AD2LRR", "!LRR:008,1,CID_1123,ff");
+
         mqtt_signon_sent = 1;
       }
 
@@ -413,7 +425,7 @@ void mqttLoop(uint32_t tlaps) {
       mqtt_ping_delay -= tlaps;      
       if (mqtt_ping_delay<=0) {
         Serial.println("!DBG:AD2EMB,MQTT publish AD2LRR:AD2ESP32_PING");
-        mqttClient.publish("AD2LRR", "!INF:AD2ESP32_PING");
+        mqttClient.publish(SECRET_MQTT_ROOT_TOPIC "AD2LRR", "!INF:AD2ESP32_PING");
         mqtt_ping_delay = MQTT_CONNECT_PING_INTERVAL;
       }
       
@@ -469,11 +481,21 @@ void uartLoop() {
  */
  
 /**
- * ON_RAW_MESSAGE
- * When a full message is received before it is parsed.
+ * ON_MESSAGE
+ * When a full standard alarm state message is received before it is parsed.
  * WARNING: It may be invalid.
  */
-void my_ON_RAW_MESSAGE_CB(void *msg) {
+void my_ON_MESSAGE_CB(void *msg) {
+  String* sp = (String *)msg;
+  Serial.println(*sp);
+}
+
+/**
+ * ON_LRR
+ * When a LRR message is received.
+ * WARNING: It may be invalid.
+ */
+void my_ON_LRR_CB(void *msg) {
   String* sp = (String *)msg;
   Serial.println(*sp);
 }

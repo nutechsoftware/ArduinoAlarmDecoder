@@ -49,10 +49,10 @@ AlarmDecoderParser::AlarmDecoderParser() {
   ON_CHIME_CHANGED_CB = 0;
   ON_MESSAGE_CB = 0;
   ON_EXPANDER_MESSAGE_CB = 0;
-  ON_LRR_MESSAGE_CB = 0;
-  ON_RFX_MESSAGE_CB = 0;
+  ON_LRR_CB = 0;
+  ON_RFX_CB = 0;
   ON_SENDING_RECEIVED_CB = 0;
-  ON_AUI_MESSAGE_CB = 0;
+  ON_AUI_CB = 0;
   ON_KPM_CB = 0;
   ON_KPE_CB = 0;
   ON_CRC_CB = 0;
@@ -195,7 +195,61 @@ bool AlarmDecoderParser::put(uint8_t *buff, int8_t len) {
           // All other cases are invalid
           //
           if (msg[0] == '!') {
-
+            if (msg.startsWith("!LRR:")) {
+              // call ON_LRR callback if enabled.
+              if (ON_LRR_CB) {
+                ON_LRR_CB((void*)&msg);
+              }
+            } else
+            if (msg.startsWith("!REL:") || msg.startsWith("!EXP:")) {
+              // call ON_EXPANDER_MESSAGE callback if enabled.
+              if (ON_EXPANDER_MESSAGE_CB) {
+                ON_EXPANDER_MESSAGE_CB((void*)&msg);
+              }
+            } else
+            if (msg.startsWith("!RFX:")) {
+              // call ON_RFX callback if enabled.
+              if (ON_RFX_CB) {
+                ON_RFX_CB((void*)&msg);
+              }
+            } else
+            if (msg.startsWith("!AUI:")) {
+              // call ON_AUI callback if enabled.
+              if (ON_AUI_CB) {
+                ON_AUI_CB((void*)&msg);
+              }
+            } else
+            if (msg.startsWith("!KPM:")) {
+              // call ON_KPM callback if enabled.
+              if (ON_KPM_CB) {
+                ON_KPM_CB((void*)&msg);
+              }
+            } else
+            if (msg.startsWith("!KPE:")) {
+              // call ON_KPE callback if enabled.
+              if (ON_KPE_CB) {
+                ON_KPE_CB((void*)&msg);
+              }
+            } else
+            if (msg.startsWith("!CRC:")) {
+              // call ON_CRC callback if enabled.
+              if (ON_CRC_CB) {
+                ON_CRC_CB((void*)&msg);
+              }
+            } else
+            if (msg.startsWith("!VER:")) {
+              // Parse the version string.
+              // call ON_VER callback if enabled.
+              if (ON_VER_CB) {
+                ON_VER_CB((void*)&msg);
+              }
+            } else
+            if (msg.startsWith("!ERR:")) {
+              // call ON_ERR callback if enabled.
+              if (ON_ERR_CB) {
+                ON_ERR_CB((void*)&msg);
+              }
+            }
           } else {
             // http://www.alarmdecoder.com/wiki/index.php/Protocol#Keypad
             if (msg[0] == '[') {
@@ -290,6 +344,11 @@ bool AlarmDecoderParser::put(uint8_t *buff, int8_t len) {
                 Serial.print(") Bypassed(");
                 Serial.print(ad2ps->zone_bypassed);
                 Serial.println(")");
+
+                // call ON_MESSAGE callback if enabled.
+                if (ON_MESSAGE_CB) {
+                  ON_MESSAGE_CB((void*)&msg);
+                }
               }
             } else {
               //FIXME: Error
@@ -480,17 +539,17 @@ void AlarmDecoderParser::setCB_ON_EXPANDER_MESSAGE(AD2ParserCallback_msg_t cb) {
 }
 
 /**
- * setCB_ON_LRR_MESSAGE
+ * setCB_ON_LRR
  */
-void AlarmDecoderParser::setCB_ON_LRR_MESSAGE(AD2ParserCallback_msg_t cb) {
-  ON_LRR_MESSAGE_CB = cb;
+void AlarmDecoderParser::setCB_ON_LRR(AD2ParserCallback_msg_t cb) {
+  ON_LRR_CB = cb;
 }
 
 /**
- * setCB_ON_RFX_MESSAGE
+ * setCB_ON_RFX
  */
-void AlarmDecoderParser::setCB_ON_RFX_MESSAGE(AD2ParserCallback_msg_t cb) {
-  ON_RFX_MESSAGE_CB = cb;
+void AlarmDecoderParser::setCB_ON_RFX(AD2ParserCallback_msg_t cb) {
+  ON_RFX_CB = cb;
 }
 
 /**
@@ -501,10 +560,10 @@ void AlarmDecoderParser::setCB_ON_SENDING_RECEIVED(AD2ParserCallback_msg_t cb) {
 }
 
 /**
- * setCB_ON_AUI_MESSAGE
+ * setCB_ON_AUI
  */
-void AlarmDecoderParser::setCB_ON_AUI_MESSAGE(AD2ParserCallback_msg_t cb) {
-  ON_AUI_MESSAGE_CB = cb;
+void AlarmDecoderParser::setCB_ON_AUI(AD2ParserCallback_msg_t cb) {
+  ON_AUI_CB = cb;
 }
 
 /**

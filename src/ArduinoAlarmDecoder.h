@@ -191,10 +191,10 @@ class AlarmDecoderParser
 		void setCB_ON_CHIME_CHANGED(AD2ParserCallback_msg_t cb);
 		void setCB_ON_MESSAGE(AD2ParserCallback_msg_t cb);
 		void setCB_ON_EXPANDER_MESSAGE(AD2ParserCallback_msg_t cb);
-		void setCB_ON_LRR_MESSAGE(AD2ParserCallback_msg_t cb);
-		void setCB_ON_RFX_MESSAGE(AD2ParserCallback_msg_t cb);
+		void setCB_ON_LRR(AD2ParserCallback_msg_t cb);
+		void setCB_ON_RFX(AD2ParserCallback_msg_t cb);
 		void setCB_ON_SENDING_RECEIVED(AD2ParserCallback_msg_t cb);
-		void setCB_ON_AUI_MESSAGE(AD2ParserCallback_msg_t cb);
+		void setCB_ON_AUI(AD2ParserCallback_msg_t cb);
 		void setCB_ON_KPM(AD2ParserCallback_msg_t cb);
 		void setCB_ON_KPE(AD2ParserCallback_msg_t cb);
 		void setCB_ON_CRC(AD2ParserCallback_msg_t cb);
@@ -221,10 +221,10 @@ class AlarmDecoderParser
 		AD2ParserCallback_msg_t ON_CHIME_CHANGED_CB;
 		AD2ParserCallback_msg_t ON_MESSAGE_CB;
     AD2ParserCallback_msg_t ON_EXPANDER_MESSAGE_CB;
-		AD2ParserCallback_msg_t ON_LRR_MESSAGE_CB;
-		AD2ParserCallback_msg_t ON_RFX_MESSAGE_CB;
+		AD2ParserCallback_msg_t ON_LRR_CB;
+		AD2ParserCallback_msg_t ON_RFX_CB;
 		AD2ParserCallback_msg_t ON_SENDING_RECEIVED_CB;
-		AD2ParserCallback_msg_t ON_AUI_MESSAGE_CB;
+		AD2ParserCallback_msg_t ON_AUI_CB;
 		AD2ParserCallback_msg_t ON_KPM_CB;
 		AD2ParserCallback_msg_t ON_KPE_CB;
 		AD2ParserCallback_msg_t ON_CRC_CB;
