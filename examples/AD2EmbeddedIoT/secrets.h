@@ -14,16 +14,16 @@
 // FAIL: mosquitto.org SSL
 //#define MQTT_SERVER_SSL_TEST_MOSQUITO_ORG
 
-// PASS: cloudmqtt.com SSL+AUTH
+// FAIL: cloudmqtt.com SSL+AUTH
 //#define MQTT_SERVER_SSLAUTH_POSTMAN_CLOUDMQTT_COM
 
 // FAIL: dioty.co SSL+AUTH
 //#define MQTT_SERVER_SSLAUTH_MQTT_DIOTY_CO
 
-// PASS: dioty.co CLEARTEXT+AUTH
+// FAIL: dioty.co CLEARTEXT+AUTH
 //#define MQTT_SERVER_CLEARTEXTAUTH_MQTT_DIOTY_CO
 
-// PASS: fluux.io SSL
+// FAIL: fluux.io SSL
 //#define MQTT_SERVER_SSL_MQTT_FLUUX_IO
 
 /*
@@ -32,6 +32,8 @@
 // MQTT mosquitto.org CLEAR TEXT profile
 #if defined(MQTT_SERVER_CLEARTEXT_TEST_MOSQUITTO_ORG)
 #define SECRET_MQTT_ROOT_TOPIC    ""
+#define SECRET_MQTT_TOPIC         SECRET_MQTT_ROOT_TOPIC "AD2LRR"
+#define SECRET_MQTT_QOS           2 // Exactly once
 #define SECRET_MQTT_SERVER        "test.mosquitto.org"
 #define SECRET_MQTT_PORT          1883
 #define SECRET_MQTT_USER          NULL
@@ -40,6 +42,8 @@
 // MQTT SSL test.mosquitto.org profile
 #elif defined(MQTT_SERVER_SSL_TEST_MOSQUITO_ORG)
 #define SECRET_MQTT_ROOT_TOPIC    ""
+#define SECRET_MQTT_TOPIC         SECRET_MQTT_ROOT_TOPIC "AD2LRR"
+#define SECRET_MQTT_QOS           2 // Exactly once
 #define SECRET_MQTT_SERVER        "test.mosquitto.org"
 #define SECRET_MQTT_PORT          8883
 #define SECRET_MQTT_USER          NULL
@@ -69,6 +73,8 @@
 // openssl s_client -showcerts -connect  postman.cloudmqtt.com:20445
 #elif defined(MQTT_SERVER_SSLAUTH_POSTMAN_CLOUDMQTT_COM)
 #define SECRET_MQTT_ROOT_TOPIC    ""
+#define SECRET_MQTT_TOPIC         SECRET_MQTT_ROOT_TOPIC "AD2LRR"
+#define SECRET_MQTT_QOS           2 // Exactly once
 #define SECRET_MQTT_SERVER        "postman.cloudmqtt.com"
 #define SECRET_MQTT_PORT          20445
 #define SECRET_MQTT_USER          ""
@@ -109,6 +115,8 @@
 // MQTT mqtt.dioty.co CLEAR TEXT AUTH profile
 #elif defined(MQTT_SERVER_CLEARTEXTAUTH_MQTT_DIOTY_CO)
 #define SECRET_MQTT_ROOT_TOPIC    "/foo@example.com/"
+#define SECRET_MQTT_TOPIC         SECRET_MQTT_ROOT_TOPIC "AD2LRR"
+#define SECRET_MQTT_QOS           2 // Exactly once
 #define SECRET_MQTT_SERVER        "mqtt.dioty.co"
 #define SECRET_MQTT_PORT          1883
 #define SECRET_MQTT_USER          "foo@example.com"
@@ -117,6 +125,8 @@
 // MQTT mqtt.dioty.co SSL AUTH profile
 #elif defined(MQTT_SERVER_SSLAUTH_MQTT_DIOTY_CO)
 #define SECRET_MQTT_ROOT_TOPIC    "/foo@example.com/"
+#define SECRET_MQTT_TOPIC         SECRET_MQTT_ROOT_TOPIC "AD2LRR"
+#define SECRET_MQTT_QOS           2 // Exactly once
 #define SECRET_MQTT_SERVER        "mqtt.dioty.co"
 #define SECRET_MQTT_PORT          8883
 #define SECRET_MQTT_USER          "foo@example.com"
@@ -173,11 +183,16 @@
 // MQTT fluux.io SSL profile
 #elif defined(MQTT_SERVER_SSL_MQTT_FLUUX_IO)
 #define SECRET_MQTT_ROOT_TOPIC    ""
+#define SECRET_MQTT_TOPIC         SECRET_MQTT_ROOT_TOPIC "AD2LRR"
+#define SECRET_MQTT_QOS           2 // Exactly once
 #define SECRET_MQTT_SERVER        "mqtt.fluux.io"
 #define SECRET_MQTT_PORT          8883
 #define SECRET_MQTT_USER          NULL
 #define SECRET_MQTT_PASS          NULL
 
+// Use tool in library async-mqtt-client-master/scripts/get-fingerprint/get-fingerprint.py
+// python get-fingerprint.py --host mqtt.fluux.io --port 8883
+#define SECRET_MQTT_SERVER_FINGERPRINT {0x0a, 0xd3, 0xf1, 0x79, 0xac, 0x90, 0x79, 0xbf, 0x00, 0x8d, 0xfb, 0x44, 0x00, 0x77, 0x70, 0xc2, 0xe9, 0x9e, 0x5c, 0xab}
 // openssl s_client -showcerts -connect mqtt.fluux.io:8883
 #define SECRET_MQTT_SERVER_CERT   "-----BEGIN CERTIFICATE-----\n" \
 "MIIEkjCCA3qgAwIBAgIQCgFBQgAAAVOFc2oLheynCDANBgkqhkiG9w0BAQsFADA/\n" \

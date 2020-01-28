@@ -22,6 +22,8 @@
  *
  */
 
+#include "config.h"
+
 // AlarmDecoder arduino parsing state machine.
 // https://github.com/nutechsoftware/ArduinoAlarmDecoder
 #include <ArduinoAlarmDecoder.h>
@@ -31,8 +33,8 @@
  * 
  * Inside of the Arduino  IDE create a new TAB and call it secrets.h
  * Next add the next two lines to this file and save the file.
- * #define SECRET_WIFI_SSID "Your SSID Here"
- * #define SECRET_WIFI_PASS "Your PASSWORD here"
+#define SECRET_WIFI_SSID "Your SSID Here"
+#define SECRET_WIFI_PASS "Your PASSWORD here"
  */
 #include "secrets.h"
 
@@ -73,7 +75,7 @@
  */
 #define EN_ETH
 #define EN_WIFI
-#define EN_MQTT_CLIENT
+#define EN_MQTT_ASYNC_CLIENT
 //#define EN_REST_HOST
 //#define EN_SSDP
 
@@ -91,11 +93,40 @@
  */
 #ifdef EN_WIFI
 #include <WiFi.h>
-#include <WiFiClientSecure.h>
-/// WIFI Constants
-const char* wifi_ssid    = SECRET_WIFI_SSID;
-const char* wifi_pass    = SECRET_WIFI_PASS;
+TimerHandle_t wifiReconnectTimer;
+#define WIFI_CONNECT_INTERVAL 5000
 #endif // EN_WIFI
+
+
+/**
+ * MQTT Async client support
+ */
+ /**
+  * FIXME:
+  * trying this out.
+  *   https://github.com/me-no-dev/ESPAsyncTCP
+  *   https://github.com/me-no-dev/AsyncTCP
+  */
+#ifdef EN_MQTT_ASYNC_CLIENT
+// async-mqtt-client v0.8.1
+// https://github.com/marvinroger/async-mqtt-client
+// *requires https://github.com/me-no-dev/AsyncTCP
+#include <AsyncMqttClient.h>
+
+/// MQTT secrets.h defines.
+// MQTT DEFINES
+#define MQTT_CONNECT_RETRY_INTERVAL 5000   // every 5 seconds
+#define MQTT_CONNECT_PING_INTERVAL 60000   // every 60 seconds
+
+// MQTT globals
+#if defined(SECRET_MQTT_SERVER)
+#else
+#error select an MQTT server profile from secrets.h
+#endif
+AsyncMqttClient mqttClient;
+TimerHandle_t mqttReconnectTimer;
+String mqtt_clientId;
+#endif // EN_MQTT_ASYNC_CLIENT
 
 
 /** 
@@ -109,7 +140,8 @@ const char* wifi_pass    = SECRET_WIFI_PASS;
 /** 
  * Common global/static 
  */
- 
+#define VERBOSE
+
 // used by both Ethernet and Wifi arduino drivers
 const char* host_name   = "AD2ESP32";
 static bool eth_connected = false;
@@ -138,31 +170,6 @@ IPAddress static_subnet(255,255,0,0);
 AlarmDecoderParser AD2Parse;
 
 
-/** 
- *  MQTT client support
- */
-#ifdef EN_MQTT_CLIENT
-// PubSubClient v2.6.0 by Nick O'Leary
-// https://github.com/knolleary/pubsubclient
-#include <PubSubClient.h>
-// MQTT DEFINES
-#define MQTT_CONNECT_RETRY_INTERVAL 5000   // every 5 seconds
-#define MQTT_CONNECT_PING_INTERVAL 60000   // every 60 seconds
-
-// MQTT globals
-#if defined(SECRET_MQTT_SERVER) && defined(SECRET_MQTT_SERVER_CERT)
-WiFiClientSecure mqttnetClient;
-#elif defined(SECRET_MQTT_SERVER)
-WiFiClient mqttnetClient;
-#else
-#error select an MQTT server profile from secrets.h
-#endif
-PubSubClient mqttClient(mqttnetClient);
-String mqtt_clientId;
-#endif // EN_MQTT_CLIENT
-
-
-
 /**
  * Arduino Sketch setup()
  *   Called once after hardware powers on.
@@ -179,10 +186,7 @@ void setup()
 
   // Open AlarmDecoder UART
   Serial2.begin(AD2_BAUD, SERIAL_8N1, AD2_TX, AD2_RX);
-  // The ESP32 uart driver has its own interrupt and buffers for processing
-  // rx bytes. Give it plenty of space. 1024 gave about 1 minute storage of
-  // normal messages from AD2 on Vista 50PUL panel with one partition.
-  // If any loop() method is busy too long alarm panel state data will be lost.
+  // Give the  ESP32 uart driver lots of space to avoid data loss when busy.
   Serial2.setRxBufferSize(2048);
 
 #ifdef EN_ETH
@@ -199,19 +203,26 @@ void setup()
   // Start wifi
   WiFi.disconnect(true);
   WiFi.onEvent(networkEvent);
-  WiFi.begin(wifi_ssid, wifi_pass);
+  wifiReconnectTimer = xTimerCreate("wifiTimer", pdMS_TO_TICKS(WIFI_CONNECT_INTERVAL), pdFALSE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(connectToWifi));
+  connectToWifi();
 #endif
 
-#ifdef EN_MQTT_CLIENT
-#ifdef SECRET_MQTT_SERVER_CERT
-#endif
+#if defined(EN_MQTT_ASYNC_CLIENT)
+  // setup MQTT connection.
   mqttSetup();
 #endif
 
-  // AlarmDecoder wiring.
+  // ASYNC AlarmDecoder event wiring.
   AD2Parse.setCB_ON_MESSAGE(my_ON_MESSAGE_CB);
   AD2Parse.setCB_ON_LRR(my_ON_LRR_CB);
 }
+
+#ifdef EN_WIFI
+void connectToWifi() {
+  Serial.println("!DBG:AD2EMB,Wi-Fi connect starting.");
+  WiFi.begin(SECRET_WIFI_SSID, SECRET_WIFI_PASS);
+}
+#endif
 
 /**
  * Arduino Sketch loop()
@@ -223,9 +234,6 @@ void loop()
   // UART AD2/HOST bridge and AD2* message processing
   uartLoop();
   
-  // Netorking ETH/WiFi persistent connection state machine cycles
-  networkLoop();
-
   // update currrent time
   time_now = millis();
 
@@ -233,37 +241,6 @@ void loop()
   delay(1);
 
 }
-
-/**
- * Networking state machine
- *  1) Monitor network hardware.
- *  2) Keep connections persistent.
- *  3) Respond to connection activity.
- *  
- */
-void networkLoop() {
-
-  // calculate time since the end of the last loop.
-  uint32_t tlaps = (millis() - time_now);
-
-  // if we have an interface active process network service states
-  if (eth_connected || wifi_connected) {
-
-#ifdef EN_MQTT_CLIENT
-    mqttLoop(tlaps);
-#endif
-
-#ifdef EN_REST_CLIENT
-#error FIXME: not implemented.
-#endif
-
-#ifdef EN_SSDP
-#error FIXME: not implemented.
-#endif
-
-  }
-}
-
 
 /**
  * WIFI / Ethernet state event handler
@@ -280,6 +257,10 @@ void networkEvent(WiFiEvent_t event)
     case SYSTEM_EVENT_STA_DISCONNECTED:
       Serial.println("!DBG:AD2EMB,STA Disconnected");
       eth_connected = false;
+#if defined(EN_MQTT_ASYNC_CLIENT)
+      // disable mqttTimer connect timer if even active
+      xTimerStop(mqttReconnectTimer, 0);
+#endif
       break;
     case SYSTEM_EVENT_STA_CONNECTED:
       Serial.println("!DBG:AD2EMB,STA Connected");
@@ -290,6 +271,10 @@ void networkEvent(WiFiEvent_t event)
       Serial.print(", IPv4: ");
       Serial.println(WiFi.localIP());
       wifi_connected = true;
+#if defined(EN_MQTT_ASYNC_CLIENT)
+      // start MQTT ASYNC connection
+      mqttConnect();
+#endif
       break;
     case SYSTEM_EVENT_STA_STOP:
       Serial.println("!DBG:AD2EMB,STA Stopped");
@@ -318,10 +303,18 @@ void networkEvent(WiFiEvent_t event)
       Serial.print(ETH.linkSpeed());
       Serial.println("Mbps");
       eth_connected = true;
+#if defined(EN_MQTT_ASYNC_CLIENT)
+      // start MQTT ASYNC connection
+      mqttConnect();
+#endif
       break;
     case SYSTEM_EVENT_ETH_DISCONNECTED:
       Serial.println("!DBG:AD2EMB,ETH Disconnected");
       eth_connected = false;
+#if defined(EN_MQTT_ASYNC_CLIENT)
+      // disable mqttTimer connect timer if even active
+      xTimerStop(mqttReconnectTimer, 0);
+#endif
       break;
     case SYSTEM_EVENT_ETH_STOP:
       Serial.println("!DBG:AD2EMB,ETH Stopped");
@@ -335,16 +328,18 @@ void networkEvent(WiFiEvent_t event)
 }
 
 
-#ifdef EN_MQTT_CLIENT
+#if defined(EN_MQTT_ASYNC_CLIENT)
 /**
- * MQTT Client reporting service
+ * MQTT ASYNC Client reporting service
  * 
  *  1) Stay connected to a server.
- *     PubSubClient.cpp sends network PING to ensure the 
+ *     AsyncMqttClient.cpp sends network PING to ensure the
  *     client stays connected to the server.
  *
  *  2) Publish periodic messages to subscriber(s) to ensure
  *     this device publications are being monitored.
+ *
+ *  3) Optional set QOS level 2 to ensure data deliver.
  *
  */
 
@@ -352,90 +347,149 @@ void networkEvent(WiFiEvent_t event)
  * MQTT setup
  */
 void mqttSetup() {
+
+  // setup ASYNC callbackup functions
+  mqttClient.onConnect(onMqttConnect);
+  mqttClient.onDisconnect(onMqttDisconnect);
+  mqttClient.onSubscribe(onMqttSubscribe);
+  mqttClient.onUnsubscribe(onMqttUnsubscribe);
+  mqttClient.onMessage(onMqttMessage);
+  mqttClient.onPublish(onMqttPublish);
+  mqttClient.setServer(SECRET_MQTT_SERVER, SECRET_MQTT_PORT);
+
+  // build our client ID
   mqtt_clientId = "AD2ESP32Client-";
   mqtt_clientId += String(random(0xffff), HEX);
+  mqttClient.setClientId(mqtt_clientId.c_str());
+
+  // keepalive
+  mqttClient.setKeepAlive(20);
+
+  // configure server connection and credentials.
   mqttClient.setServer(SECRET_MQTT_SERVER, SECRET_MQTT_PORT);
+  mqttClient.setCredentials(SECRET_MQTT_USER,SECRET_MQTT_PASS);
+
 #ifdef SECRET_MQTT_SERVER_CERT
-  /* set SSL/TLS certificate */
-  mqttnetClient.setCACert(SECRET_MQTT_SERVER_CERT);
-  // FIXME: client certificates.
-  /// client.setCertificate
-  /// client.setPrivateKey
+  // enable secure
+  //mqttClient.setSecure(true);
+
+  //mqttClient.setSecure(MQTT_SECURE);
+//  if (MQTT_SECURE) {
+    mqttClient.addServerFingerprint((const uint8_t[])SECRET_MQTT_SERVER_FINGERPRINT);
+//  }
+
+  //mqttClient.addServerFingerprint();
+#endif
+
+  // create timer for mqtt reconnecting ever 5 seconds when disconnected
+  mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(MQTT_CONNECT_RETRY_INTERVAL),
+   pdFALSE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(mqttConnect));
+}
+
+/**
+ * Start ASYNC connect to MQTT server
+ */
+void mqttConnect() {
+  Serial.println("!DBG:AD2EMB,MQTT connection starting...");
+  mqttClient.connect();
+}
+
+/**
+ * MQTT ASYNC Callback on connect
+ */
+void onMqttConnect(bool sessionPresent) {
+  Serial.println("!DBG:AD2EMB,MQTT connected.");
+#if defined(VERBOSE)
+  Serial.print("!DBG:AD2EMB,MQTT Session present: ");
+  Serial.println(sessionPresent);
+#endif
+
+  uint16_t packetIdSub = mqttClient.subscribe(SECRET_MQTT_TOPIC, SECRET_MQTT_QOS);
+
+#if defined(VERBOSE)
+  Serial.print("!DBG:AD2EMB,MQTT Subscribing at QoS 2, packetId: ");
+  Serial.println(packetIdSub);
+#endif
+
+  uint16_t packetIdPub1 = mqttClient.publish(SECRET_MQTT_TOPIC, SECRET_MQTT_QOS, true, "!LRR:008,1,CID_3123,ff");
+#if defined(VERBOSE)
+  Serial.print("!DBG:AD2EMB,MQTT Publishing.");
+  Serial.println(packetIdPub1);
+#endif
+
+}
+
+/**
+ * MQTT ASYNC Callback on disconnect
+ */
+void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
+  Serial.print("!DBG:AD2EMB,MQTT Disconnected. ");
+  if (eth_connected || wifi_connected) {
+    Serial.print(" Starting reconnect timer.");
+    xTimerStart(mqttReconnectTimer, 0);
+  } else {
+    Serial.print(" Waiting for network to return.");
+  }
+}
+
+/**
+ * MQTT ASYNC Callback on subscribe
+ */
+void onMqttSubscribe(uint16_t packetId, uint8_t qos) {
+  Serial.println("!DBG:AD2EMB,MQTT Subscribe acknowledged.");
+#if defined(VERBOSE)
+  Serial.print("!DBG:AD2EMB,MQTT packetId: ");
+  Serial.println(packetId);
+  Serial.print("!DBG:AD2EMB,MQTT qos: ");
+  Serial.println(qos);
 #endif
 }
 
 /**
- * Attempt to connect to MQTT server(blocking)
+ * MQTT ASYNC Callback on unsubscribe
  */
-bool mqttConnect() {
-  bool res = true;
-  
-  if(!mqttClient.connected()) {
-    Serial.print("!DBG:AD2EMB,MQTT connection starting...");
-    // Attempt to connect
-    if (mqttClient.connect(mqtt_clientId.c_str(), SECRET_MQTT_USER, SECRET_MQTT_PASS)) {
-      Serial.println("connected");
-      mqttClient.subscribe("AD2LRR");
-      mqttClient.publish(SECRET_MQTT_ROOT_TOPIC "AD2LRR", "!LRR:008,1,CID_3123,ff");
-    } else {
-      Serial.print(" failed, client.connect() rc=");
-      Serial.println(mqttClient.state());
-      res = false;
-    }
-  }
-  return res;
+void onMqttUnsubscribe(uint16_t packetId) {
+  Serial.println("!DBG:AD2EMB,MQTT Unsubscribe acknowledged.");
+#if defined(VERBOSE)
+  Serial.print("!DBG:AD2EMB,MQTT packetId: ");
+  Serial.println(packetId);
+#endif
 }
 
 /**
- * Process MQTT state
+ * MQTT ASYNC Callback on message
  */
-void mqttLoop(uint32_t tlaps) {
-      /// delay: counters must be signed to easily detect overflow by going negative
-    static int32_t mqtt_reconnect_delay = 0;
-    static int32_t mqtt_ping_delay = 0;
-  
-    /// state: fire off a message on first connect.
-    static uint8_t mqtt_signon_sent = 0;
-
-    if (!mqttClient.connected()) {
-      if (!mqtt_reconnect_delay) {
-        mqtt_reconnect_delay = MQTT_CONNECT_RETRY_INTERVAL;
-      } else {
-        mqtt_reconnect_delay -= tlaps;
-        if (mqtt_reconnect_delay<=0){
-          mqtt_reconnect_delay=0;
-          if (!mqttConnect()) {
-            mqtt_reconnect_delay = MQTT_CONNECT_RETRY_INTERVAL;         
-          }
-        }
-        if (mqttClient.connected()) {
-          mqtt_ping_delay = MQTT_CONNECT_PING_INTERVAL;
-        }
-      }
-    } else {
-      if (!mqtt_signon_sent) {
-        Serial.println("!DBG:AD2EMB,MQTT publish AD2LRR:TEST");
-        mqttClient.publish(SECRET_MQTT_ROOT_TOPIC "AD2LRR", "!LRR:008,1,CID_1123,ff");
-
-        mqtt_signon_sent = 1;
-      }
-
-      // See if we have a host subscribing to AD2LRR watching this device.
-      // FIXME: If the host goes away set an alarm state
-      mqtt_ping_delay -= tlaps;      
-      if (mqtt_ping_delay<=0) {
-        Serial.println("!DBG:AD2EMB,MQTT publish AD2LRR:AD2ESP32_PING");
-        mqttClient.publish(SECRET_MQTT_ROOT_TOPIC "AD2LRR", "!INF:AD2ESP32_PING");
-        mqtt_ping_delay = MQTT_CONNECT_PING_INTERVAL;
-      }
-      
-    }
-
-    // give the MQTT client class state machine cycles
-    mqttClient.loop();    
-
+void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total) {
+  Serial.println("!DBG:AD2EMB,MQTT Publish received.");
+#if defined(VERBOSE)
+  Serial.print("!DBG:AD2EMB,MQTT topic: ");
+  Serial.println(topic);
+  Serial.print("!DBG:AD2EMB,MQTT qos: ");
+  Serial.println(properties.qos);
+  Serial.print("!DBG:AD2EMB,MQTT dup: ");
+  Serial.println(properties.dup);
+  Serial.print("!DBG:AD2EMB,MQTT retain: ");
+  Serial.println(properties.retain);
+  Serial.print("!DBG:AD2EMB,MQTT len: ");
+  Serial.println(len);
+  Serial.print("!DBG:AD2EMB,MQTT index: ");
+  Serial.println(index);
+  Serial.print("!DBG:AD2EMB,MQTT total: ");
+  Serial.println(total);
+#endif
 }
-#endif // EN_MQTT_CLIENT
+
+/**
+ * MQTT ASYNC Callback on publish
+ */
+void onMqttPublish(uint16_t packetId) {
+  Serial.println("!DBG:AD2EMB,MQTT Publish acknowledged.");
+#if defined(VERBOSE)
+  Serial.print("!DBG:AD2EMB,MQTT packetId: ");
+  Serial.println(packetId);
+#endif
+}
+#endif //EN_MQTT_ASYNC_CLIENT
 
 /**
  * 1) read from AD2* uart and send to host uart.
@@ -477,7 +531,7 @@ void uartLoop() {
 }
 
 /**
- * AlarmDecoder callbacks.
+ * ASYNC AlarmDecoder callbacks.
  */
  
 /**
