@@ -22,68 +22,28 @@
  *
  */
 
-// AlarmDecoder arduino parsing state machine.
-// https://github.com/nutechsoftware/ArduinoAlarmDecoder
-#include <ArduinoAlarmDecoder.h>
+/**
+ * Base configuration settings
+ */
+#include "config.h"
 
 /**
- * Include our secrets file. Must create this file to build the project.
- * 
- * Inside of the Arduino  IDE create a new TAB and call it secrets.h
- * Next add the next two lines to this file and save the file.
- * #define SECRET_WIFI_SSID "Your SSID Here"
- * #define SECRET_WIFI_PASS "Your PASSWORD here"
+ * Include secrets file to contain keys, passwords that may be private
+ * to a given install.
  */
 #include "secrets.h"
 
 /**
- * Hardware setup
- * FIXME: needs design work.
+ * AlarmDecoder Arduino library.
+ * https://github.com/nutechsoftware/ArduinoAlarmDecoder
  */
-#define HW_ESP32_EVB_EA
-//#define HW_ESP32_TTGO_TBEAM10
-//#define HW_ESP32_THING
-
-// OLIMAX ESP32-EVB-EA HARDWARE SETTINGS
-// Connect the AD2* TX PIN to ESP32 RX PIN and AD2* RX PIN to ESP32 TX PIN
-#ifdef HW_ESP32_EVB_EA
- // Use UART2 on ESP32
- //#define USE_ESP32_UART2
- #ifndef USE_ESP32_UART2
-  #warning Using ESP32 software uart on AD2TX->UEXT:RXD(4):GPIO4 UEXT:TXD(3):GPIO36->AD2RX
-  // UEXT TXD(3)/RXD(4) are on not connected to the ESP32 hardware UART.
-  #define AD2_TX 4  // UEXT PIN 4
-  #define AD2_RX 36 // UEXT PIN 3
- #else
-  #warning Using ESP32 hardware uart AD2TX->UEXT:SCL(5):GPIO16 UEXT:SSEL(10):GPIO17->AD2RX
-  #define AD2_TX 16 // UEXT PIN  5
-  #define AD2_RX 17 // UEXT PIN 10
- #endif
-#endif
-
-
-// Default AD2* BAUD is 115200 but can be adjusted by jumpers.
-#define AD2_BAUD 115200
-
-/**
- *  Enable device features/service
- *  
- *  It may not be possible to enable all at the same time.
- *  This will depend on the hardware code and ram space.
- */
-#define EN_ETH
-#define EN_WIFI
-#define EN_MQTT_CLIENT
-//#define EN_REST_HOST
-//#define EN_SSDP
+#include <ArduinoAlarmDecoder.h>
 
 /**
  * Arduino/Espressif built in support for LAN87XX chip
  */
 #ifdef EN_ETH
 #include <ETH.h>
-// ETH Constants
-/// FIXME: Static IP/DHCP
 #endif
 
 /** 
@@ -92,26 +52,28 @@
 #ifdef EN_WIFI
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
-/// WIFI Constants
-const char* wifi_ssid    = SECRET_WIFI_SSID;
-const char* wifi_pass    = SECRET_WIFI_PASS;
 #endif // EN_WIFI
 
+/**
+ *  MQTT client support
+ */
+#if defined(EN_MQTT_CLIENT)
+// PubSubClient v2.6.0 by Nick O'Leary
+// https://github.com/knolleary/pubsubclient
+#include <PubSubClient.h>
+#endif // EN_MQTT_CLIENT
 
 /** 
- * Test code defines
+ * Base settings tests.
  */
 #if defined(EN_ETH) + defined(EN_WIFI) == 0
 #error Must define at least one network interface
 #endif
 
-
 /** 
- * Common global/static 
+ * Global/Static/constant state variables
  */
- 
-// used by both Ethernet and Wifi arduino drivers
-const char* host_name   = "AD2ESP32";
+// Network state variables.
 static bool eth_connected = false;
 static bool wifi_connected = false;
 
@@ -121,35 +83,11 @@ static uint32_t time_now = 0;
 // raw mode allows direct access to the AD2* device and disables internal processing.
 static bool raw_mode = false;
 
-// MAC address must be unique on the local network.
-byte mac[] = { 0x90, 0xA2, 0xDA, 0x0E, 0xFE, 0x40 };
-
-// IP address in case DHCP fails
-IPAddress dhcp_fail_ip(169,254,0,123);
-IPAddress dhcp_fail_gw(169,254,0,1);
-IPAddress dhcp_fail_subnet(255,255,0,0);
-
-// Static IP or 0,0,0,0 for DHCP
-IPAddress static_ip(0,0,0,0);
-IPAddress static_gw(169,254,0,1);
-IPAddress static_subnet(255,255,0,0);
-
 // AlarmDecoder parser
 AlarmDecoderParser AD2Parse;
 
-
-/** 
- *  MQTT client support
- */
-#ifdef EN_MQTT_CLIENT
-// PubSubClient v2.6.0 by Nick O'Leary
-// https://github.com/knolleary/pubsubclient
-#include <PubSubClient.h>
-// MQTT DEFINES
-#define MQTT_CONNECT_RETRY_INTERVAL 5000   // every 5 seconds
-#define MQTT_CONNECT_PING_INTERVAL 60000   // every 60 seconds
-
-// MQTT globals
+// MQTT client
+#if defined(EN_MQTT_CLIENT)
 #if defined(SECRET_MQTT_SERVER) && defined(SECRET_MQTT_SERVER_CERT)
 WiFiClientSecure mqttnetClient;
 #elif defined(SECRET_MQTT_SERVER)
@@ -160,8 +98,6 @@ WiFiClient mqttnetClient;
 PubSubClient mqttClient(mqttnetClient);
 String mqtt_clientId;
 #endif // EN_MQTT_CLIENT
-
-
 
 /**
  * Arduino Sketch setup()
@@ -176,7 +112,10 @@ void setup()
   Serial.begin(115200);
   Serial.println();
   Serial.println("!DBG:AD2EMB,Starring");
-
+//#ifdef DEBUG
+  //Serial.setDebugOutput(true);
+  esp_log_level_set("*", ESP_LOG_VERBOSE);
+//#endif
   // Open AlarmDecoder UART
   Serial2.begin(AD2_BAUD, SERIAL_8N1, AD2_TX, AD2_RX);
   // The ESP32 uart driver has its own interrupt and buffers for processing
@@ -191,7 +130,7 @@ void setup()
 
   // Static IP or DHCP?
   if (static_ip != (uint32_t)0x00000000) {
-      ETH.config(static_ip, static_gw, static_subnet);
+      ETH.config(static_ip, static_gw, static_subnet, static_dns1, static_dns2);
   }  
 #endif
 
@@ -199,7 +138,7 @@ void setup()
   // Start wifi
   WiFi.disconnect(true);
   WiFi.onEvent(networkEvent);
-  WiFi.begin(wifi_ssid, wifi_pass);
+  WiFi.begin(SECRET_WIFI_SSID, SECRET_WIFI_PASS);
 #endif
 
 #ifdef EN_MQTT_CLIENT
@@ -223,10 +162,10 @@ void loop()
   // UART AD2/HOST bridge and AD2* message processing
   uartLoop();
   
-  // Netorking ETH/WiFi persistent connection state machine cycles
+  // Networking ETH/WiFi persistent connection state machine cycles
   networkLoop();
 
-  // update currrent time
+  // update current time
   time_now = millis();
 
   // small loop delay needed for time tracking
@@ -264,6 +203,45 @@ void networkLoop() {
   }
 }
 
+/**
+ * UART processing loop.
+ *  1) read from AD2* uart and send to host uart.
+ *  2) read from host uart and send to AD2* uart.
+ *  3) process message from AD2* uart and update AD2* state machine.
+ */
+void uartLoop() {
+  int len;
+  static uint8_t buff[100];
+
+  // Read any data from the AD2* device echo to the HOST uart and parse it.
+  while ((len = Serial2.available())>0) {
+
+    // avoid consuming more than our storage.
+    if (len > sizeof(buff)) {
+      len = sizeof(buff);
+    }
+
+    int res = Serial2.readBytes(buff, len);
+    if (res > 0) {
+      if (raw_mode) {
+        // Raw mode just echo data to the host.
+        Serial.write(buff, len);
+      } else {
+        // Parse data from AD2* and report back to host.
+        AD2Parse.put(buff, len);
+      }
+    }
+  }
+
+  // Send any host data to the AD2*
+  // WARNING! AVOID multiple systems sending data at the same time to the panel.
+  while (Serial.available()>0) {
+    int res = Serial.read();
+    if (res > -1) {
+      Serial2.write((uint8_t)res);
+    }
+  }
+}
 
 /**
  * WIFI / Ethernet state event handler
@@ -275,7 +253,7 @@ void networkEvent(WiFiEvent_t event)
 #ifdef EN_WIFI
     case SYSTEM_EVENT_WIFI_READY: 
       Serial.println("!DBG:AD2EMB,WiFi interface ready");
-      WiFi.setHostname(host_name);
+      WiFi.setHostname(BASE_HOST_NAME);
       break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
       Serial.println("!DBG:AD2EMB,STA Disconnected");
@@ -301,7 +279,7 @@ void networkEvent(WiFiEvent_t event)
     case SYSTEM_EVENT_ETH_START:
       Serial.println("!DBG:AD2EMB,ETH Started");
       //set eth hostname here
-      ETH.setHostname(host_name);
+      ETH.setHostname(BASE_HOST_NAME);
       break;
     case SYSTEM_EVENT_ETH_CONNECTED:
       Serial.println("!DBG:AD2EMB,ETH Connected");
@@ -437,47 +415,12 @@ void mqttLoop(uint32_t tlaps) {
 }
 #endif // EN_MQTT_CLIENT
 
-/**
- * 1) read from AD2* uart and send to host uart.
- * 2) read from host uart and send to AD2* uart.
- * 3) process message from AD2* uart and update AD2* state machine.
- */
-void uartLoop() {
-  int len;
-  static uint8_t buff[100];
-  
-  // Read any data from the AD2* device echo to the HOST uart and parse it.
-  while ((len = Serial2.available())>0) {
-    
-    // avoid consuming more than our storage.
-    if (len > sizeof(buff)) {
-      len = sizeof(buff);
-    }
-    
-    int res = Serial2.readBytes(buff, len);
-    if (res > 0) {
-      if (raw_mode) {
-        // Raw mode just echo data to the host.
-        Serial.write(buff, len);
-      } else {
-        // Parse data from AD2* and report back to host.
-        AD2Parse.put(buff, len);        
-      }
-    }
-  }
-  
-  // Send any host data to the AD2*
-  // WARNING! AVOID multiple systems sending data at the same time to the panel.
-  while (Serial.available()>0) {
-    int res = Serial.read();
-    if (res > -1) {
-      Serial2.write((uint8_t)res);
-    }
-  }
-}
 
 /**
  * AlarmDecoder callbacks.
+ * As the AlarmDecoder receives data via put() data is validated.
+ * When a complete messages is received or a specific stream of
+ * bytes is received event(s) will be called.
  */
  
 /**
