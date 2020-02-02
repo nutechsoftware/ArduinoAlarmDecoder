@@ -1,0 +1,32 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${HOME}/.arduino15/packages/esp32/tools/*",
+                "${HOME}/.arduino15/packages/esp32/hardware/esp32/1.0.4/*",
+                "${HOME}/Arduino/libraries/**",
+                "/home/mathewss/.arduino15/packages/esp32/hardware/esp32/1.0.4/**",
+                "/home/mathewss/.arduino15/packages/esp32/tools/**"
+            ],
+            "forcedInclude": [],
+            "defines": [],
+            "intelliSenseMode": "gcc-x64",
+            "compilerPath": "/usr/bin/clang-3.8",
+            "cStandard": "c11",
+            "cppStandard": "c++17"
+        },
+        {
+            "name": "Win32",
+            "includePath": [
+                "C:\\Program Files (x86)\\Arduino\\tools\\**",
+                "C:\\Program Files (x86)\\Arduino\\hardware\\esp32\\1.0.4\\**"
+            ],
+            "forcedInclude": [],
+            "defines": [],
+            "intelliSenseMode": "msvc-x64"
+        }
+    ],
+    "version": 4
+}

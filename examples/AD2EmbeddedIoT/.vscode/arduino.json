@@ -1,0 +1,7 @@
+{
+    "sketch": "AD2EmbeddedIoT.ino",
+    "board": "esp32:esp32:esp32-evb",
+    "configuration": "FlashFreq=80,UploadSpeed=115200,PartitionScheme=default,DebugLevel=none",
+    "port": "/dev/ttyUSB0",
+    "programmer": "AVR ISP"
+}
