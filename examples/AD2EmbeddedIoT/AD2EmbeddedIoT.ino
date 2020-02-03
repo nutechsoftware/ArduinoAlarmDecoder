@@ -85,6 +85,9 @@ static bool raw_mode = false;
 
 // AlarmDecoder parser
 AlarmDecoderParser AD2Parse;
+#ifdef AD2_SOCK
+WiFiClient AD2Sock;
+#endif
 
 // MQTT client
 #if defined(EN_MQTT_CLIENT)
@@ -116,6 +119,8 @@ void setup()
   //Serial.setDebugOutput(true);
   esp_log_level_set("*", ESP_LOG_VERBOSE);
 //#endif
+
+#ifdef AD2_UART
   // Open AlarmDecoder UART
   Serial2.begin(AD2_BAUD, SERIAL_8N1, AD2_TX, AD2_RX);
   // The ESP32 uart driver has its own interrupt and buffers for processing
@@ -123,6 +128,7 @@ void setup()
   // normal messages from AD2 on Vista 50PUL panel with one partition.
   // If any loop() method is busy too long alarm panel state data will be lost.
   Serial2.setRxBufferSize(2048);
+#endif
 
 #ifdef EN_ETH
   // Start ethernet
@@ -159,8 +165,8 @@ void setup()
 void loop()
 {
 
-  // UART AD2/HOST bridge and AD2* message processing
-  uartLoop();
+  // AD2* message processing
+  ad2Loop();
   
   // Networking ETH/WiFi persistent connection state machine cycles
   networkLoop();
@@ -204,15 +210,38 @@ void networkLoop() {
 }
 
 /**
- * UART processing loop.
- *  1) read from AD2* uart and send to host uart.
- *  2) read from host uart and send to AD2* uart.
+ * AlarmDecoder processing loop.
+ *  1) read from AD2* uart/sock and send to host uart.
+ *  2) read from host uart/sock and send to AD2* uart.
  *  3) process message from AD2* uart and update AD2* state machine.
  */
-void uartLoop() {
+void ad2Loop() {
   int len;
   static uint8_t buff[100];
 
+#if defined(AD2_SOCK)
+  // if we have an interface active process network service states
+  if (eth_connected || wifi_connected) {
+      if (!AD2Sock.connected()) {
+        AD2Sock.connect(AD2_SOCKIP,AD2_SOCKPORT);
+      } else {
+        int8_t maxread = 100;
+        while (AD2Sock.available() && (maxread--)>0) {
+          // Parse data from AD2* and report back to host.
+          int8_t rx = buff[0] = AD2Sock.read();
+          if (rx>0) {
+            if (raw_mode) {
+              // Raw mode just echo data to the host.
+              Serial.write(buff, len);
+            } else {
+              AD2Parse.put(buff, 1);
+            }
+          }
+        }
+      }
+    }
+#endif
+#if defined(AD2_UART)
   // Read any data from the AD2* device echo to the HOST uart and parse it.
   while ((len = Serial2.available())>0) {
 
@@ -232,13 +261,17 @@ void uartLoop() {
       }
     }
   }
-
+#endif
   // Send any host data to the AD2*
   // WARNING! AVOID multiple systems sending data at the same time to the panel.
   while (Serial.available()>0) {
     int res = Serial.read();
     if (res > -1) {
+#if defined(AD2_UART)
       Serial2.write((uint8_t)res);
+#endif
+#if defined(AD2_SOCK)
+#endif
     }
   }
 }

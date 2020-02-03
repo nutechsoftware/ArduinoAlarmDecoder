@@ -1,7 +1,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 /**
- *  Enable base features/service
+ *  Enable Base features/service
  *  
  *  It may not be possible to enable all at the same time.
  *  This will depend on the hardware code and ram space.
@@ -18,25 +18,21 @@
 #define BASE_HOST_NAME  "AD2ESP32"
 
 /**
- * AD2* setings
- */
-#define AD2_BAUD 115200
-
-/**
  * Base network settings
  */
-// Static IP or 0,0,0,0 for DHCP
-//IPAddress static_ip(10,2,10,66);
-IPAddress static_ip(0,0,0,0);
-IPAddress static_subnet(255,255,255,0);
-IPAddress static_gw(10,2,10,1);
-IPAddress static_dns1(4,2,2,2);
-IPAddress static_dns2(8,8,8,8);
-
 // IP address in case DHCP fails
 IPAddress dhcp_fail_ip(169,254,0,123);
 IPAddress dhcp_fail_subnet(255,255,0,0);
 IPAddress dhcp_fail_gw(169,254,0,1);
+
+/**
+ * AlarmDecoder setings
+ *   [AD2_SOCK] Use a socket connection for testing. This allows an easy way to test code
+ *   and not be near an alarm panel.
+ *   [AD2_UART] The AD2* is directly connected to this host on a UART port.
+ */
+#define AD2_UART
+//#define AD2_SOCK
 
 /**
  * Base embedded hardware setup

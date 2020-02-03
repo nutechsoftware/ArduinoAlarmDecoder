@@ -1,5 +1,31 @@
 /**
- * WIFI SECRETS/SETTINGS
+ * Base network settings
+ *  Static IP or 0,0,0,0 for DHCP
+ */
+IPAddress static_ip(0,0,0,0);
+IPAddress static_subnet(255,255,255,0);
+IPAddress static_gw(0,0,0,0);
+IPAddress static_dns1(0,0,0,0);
+IPAddress static_dns2(0,0,0,0);
+
+/**
+ * Base AlarmDecoder device settings
+ */
+#if defined(AD2_UART) && defined(AD2_SOCK)
+#error Only one method of connecting to the AlarmDecoder can be defined [SOCK | UART]
+#elif defined(AD2_UART)
+// AD2 UART settings
+#define AD2_BAUD 115200
+#elif defined(AD2_SOCK)
+// AD2 ser2sock settings
+IPAddress AD2_SOCKIP(192, 168, 1, 2);
+int AD2_SOCKPORT = 10000;
+#else
+#error Must define how the AlarmDecoder is connected. Via ser2sock or local hardware uart.
+#endif
+
+/**
+ * WiFi SECRETS/SETTINGS
  */
 #define SECRET_WIFI_SSID          ""
 #define SECRET_WIFI_PASS          ""
