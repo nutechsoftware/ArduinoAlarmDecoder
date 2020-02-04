@@ -42,14 +42,16 @@
 /**
  * Arduino/Espressif built in support for LAN87XX chip
  */
-#ifdef EN_ETH
+#if defined(EN_ETH)
 #include <ETH.h>
 #endif
 
 /** 
- * Arduino/Espressif built in support for WiFi 
+ * Arduino/Espressif built in support for WiFi
+ * FIXME: 20200103SM reconnect after wifi drop not working.
+ *   * (maybe bound it inside of event handler for wifi)
  */
-#ifdef EN_WIFI
+#if defined(EN_WIFI)
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #endif // EN_WIFI
@@ -62,6 +64,36 @@
 // https://github.com/knolleary/pubsubclient
 #include <PubSubClient.h>
 #endif // EN_MQTT_CLIENT
+
+/**
+ * SSDP Services.
+ *
+ * Not in library manager.
+ * cd ${home}/Arduino/libraries
+ * git clone https://github.com/luc-github/ESP32SSDP.git
+ *  FIXME: The library needs work.
+ *    TODO: Add ModelDescription
+ *    TODO: Add ability to add a <serviceList/> section.
+ *    TODO: Add ability to set uuid
+ */
+#if defined(EN_SSDP)
+#include <ESP32SSDP.h>
+#endif
+
+
+/**
+ * HTTPServer/HTTPServer server  v0.3.1 by Frank Hessel
+ * https://github.com/fhessel/esp32_https_server
+ */
+#if defined(EN_HTTP)
+#include <HTTPServer.hpp>
+#include <HTTPRequest.hpp>
+#include <HTTPResponse.hpp>
+#endif
+#if defined(EN_HTTPS)
+#include <HTTPSServer.hpp>
+#include <SSLCert.hpp>
+#endif
 
 /** 
  * Base settings tests.
@@ -85,7 +117,7 @@ static bool raw_mode = false;
 
 // AlarmDecoder parser
 AlarmDecoderParser AD2Parse;
-#ifdef AD2_SOCK
+#if defined(AD2_SOCK)
 WiFiClient AD2Sock;
 #endif
 
@@ -102,6 +134,37 @@ PubSubClient mqttClient(mqttnetClient);
 String mqtt_clientId;
 #endif // EN_MQTT_CLIENT
 
+// SSDP service
+#if defined(EN_SSDP)
+#endif
+
+#if defined(EN_HTTP) || defined(EN_HTTPS)
+using namespace httpsserver;
+#endif
+// HTTP/HTTPS server
+#if defined(EN_HTTPS)
+// The HTTPS Server comes in a separate namespace. For easier use, include it here.
+// Create an SSL certificate object from the files included above
+SSLCert cert = SSLCert(
+  example_crt_DER, example_crt_DER_len,
+  example_key_DER, example_key_DER_len
+);
+HTTPSServer secureServer = HTTPSServer(&cert);
+#endif
+#if defined(EN_HTTP)
+HTTPServer insecureServer = HTTPServer();
+#endif
+#if defined(EN_HTTP) || defined(EN_HTTPS)
+// static resources
+#include "src/static/favicon.h"
+// Declare some handler functions for the various URLs on the server
+void handleRoot(HTTPRequest * req, HTTPResponse * res);
+void handleFavicon(HTTPRequest * req, HTTPResponse * res);
+void handleAD2icon(HTTPRequest * req, HTTPResponse * res);
+void handle404(HTTPRequest * req, HTTPResponse * res);
+void handleDeviceDescription(HTTPRequest * req, HTTPResponse * res);
+#endif
+
 /**
  * Arduino Sketch setup()
  *   Called once after hardware powers on.
@@ -114,13 +177,13 @@ void setup()
   // Open host UART
   Serial.begin(115200);
   Serial.println();
-  Serial.println("!DBG:AD2EMB,Starring");
-//#ifdef DEBUG
+  Serial.println("!DBG:AD2EMB,Starting");
+#if defined(DEBUG)
   //Serial.setDebugOutput(true);
   esp_log_level_set("*", ESP_LOG_VERBOSE);
-//#endif
+#endif
 
-#ifdef AD2_UART
+#if defined(AD2_UART)
   // Open AlarmDecoder UART
   Serial2.begin(AD2_BAUD, SERIAL_8N1, AD2_TX, AD2_RX);
   // The ESP32 uart driver has its own interrupt and buffers for processing
@@ -130,8 +193,9 @@ void setup()
   Serial2.setRxBufferSize(2048);
 #endif
 
-#ifdef EN_ETH
+#if defined(EN_ETH)
   // Start ethernet
+  Serial.println("!DBG:AD2EMB,ETH Start wait for interface ready.");
   ETH.begin();
 
   // Static IP or DHCP?
@@ -140,17 +204,59 @@ void setup()
   }  
 #endif
 
-#ifdef EN_WIFI
+#if defined(EN_WIFI)
   // Start wifi
+  Serial.println("!DBG:AD2EMB,WiFi Start. Wait for interface.");
   WiFi.disconnect(true);
   WiFi.onEvent(networkEvent);
   WiFi.begin(SECRET_WIFI_SSID, SECRET_WIFI_PASS);
 #endif
 
-#ifdef EN_MQTT_CLIENT
-#ifdef SECRET_MQTT_SERVER_CERT
+#if defined(EN_MQTT_CLIENT)
+#if defined(SECRET_MQTT_SERVER_CERT)
 #endif
   mqttSetup();
+#endif
+
+#if defined(EN_SSDP)
+    SSDP.setSchemaURL("device_description.xml");
+    SSDP.setHTTPPort(80);
+    SSDP.setName("AlarmDecoder Embedded IoT");
+    SSDP.setSerialNumber("00000000");
+    SSDP.setURL("/");
+    SSDP.setModelName(BASE_HOST_NAME);
+    SSDP.setModelNumber("2.0");
+    //FIXME: SSDP.setModelDescription("AlarmDecoder Arduino embedded IoT appliance.");
+    SSDP.setModelURL("https://github.com/nutechsoftware/alarmdecoder-embedded");
+    SSDP.setManufacturer("Nu Tech Software, Solutions, Inc.");
+    SSDP.setManufacturerURL("http://www.alarmdecoder.com/");
+    SSDP.setDeviceType("upnp:rootdevice"); //to appear as root device
+    //SSDP.setDeviceType("urn:schemas-upnp-org:device:Basic:1"); //to appear as root device
+
+    //FIXME: set <serviceList><server>
+    //FIXME: set uuid
+#endif
+
+#if defined(EN_HTTP) || defined(EN_HTTPS)
+ResourceNode * nodeRoot = new ResourceNode("/", "GET", &handleRoot);
+ResourceNode * nodeFavicon = new ResourceNode("/favicon.ico", "GET", &handleFavicon);
+ResourceNode * nodeAD2icon = new ResourceNode("/ad2icon.png", "GET", &handleAD2icon);
+ResourceNode * node404  = new ResourceNode("", "GET", &handle404);
+ResourceNode * nodeDeviceDescription = new ResourceNode("/device_description.xml", "GET", &handleDeviceDescription);
+#if defined(EN_HTTP)
+  insecureServer.registerNode(nodeRoot);
+  insecureServer.registerNode(nodeFavicon);
+  insecureServer.registerNode(nodeAD2icon);
+  insecureServer.setDefaultNode(node404);
+  insecureServer.setDefaultNode(nodeDeviceDescription);
+#endif
+#if defined(EN_HTTPS)
+  secureServer.registerNode(nodeRoot);
+  secureServer.registerNode(nodeFavicon);
+  secureServer.registerNode(nodeAD2icon);
+  secureServer.setDefaultNode(node404);
+  secureServer.setDefaultNode(nodeDeviceDescription);
+#endif
 #endif
 
   // AlarmDecoder wiring.
@@ -194,16 +300,55 @@ void networkLoop() {
   // if we have an interface active process network service states
   if (eth_connected || wifi_connected) {
 
-#ifdef EN_MQTT_CLIENT
+#if defined(EN_MQTT_CLIENT)
     mqttLoop(tlaps);
 #endif
 
-#ifdef EN_REST_CLIENT
+#if defined(EN_REST_CLIENT)
 #error FIXME: not implemented.
 #endif
 
-#ifdef EN_SSDP
-#error FIXME: not implemented.
+#if defined(EN_SSDP)
+    static bool ssdp_started = false;
+    if (!ssdp_started) {
+      Serial.println("!DBG:SSDP starting.");
+      SSDP.begin();
+      ssdp_started = true;
+    } else {
+
+    }
+#endif
+
+#if defined(EN_HTTP)
+    static bool http_started = false;
+    if (!http_started) {
+      Serial.print("!DBG:HTTP server starting.");
+      http_started = true;
+      insecureServer.start();
+      if (insecureServer.isRunning()) {
+        Serial.println("..running.");
+      } else {
+        Serial.println("..failed to start.");
+      }
+    } else {
+      insecureServer.loop();
+    }
+#endif
+
+#if defined(EN_HTTPS)
+    static bool https_started = false;
+    if (!https_started) {
+      Serial.println("!DBG:HTTPS server starting.");
+      https_started = true;
+      secureServer.start();
+      if (secureServer.isRunning()) {
+        Serial.println("..running.");
+      } else {
+        Serial.println("..failed to start.");
+      }
+    } else {
+      secureServer.loop();
+    }
 #endif
 
   }
@@ -283,14 +428,14 @@ void networkEvent(WiFiEvent_t event)
 {
   switch (event) {
 
-#ifdef EN_WIFI
+#if defined(EN_WIFI)
     case SYSTEM_EVENT_WIFI_READY: 
       Serial.println("!DBG:AD2EMB,WiFi interface ready");
       WiFi.setHostname(BASE_HOST_NAME);
       break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
       Serial.println("!DBG:AD2EMB,STA Disconnected");
-      eth_connected = false;
+      wifi_connected = false;
       break;
     case SYSTEM_EVENT_STA_CONNECTED:
       Serial.println("!DBG:AD2EMB,STA Connected");
@@ -308,7 +453,7 @@ void networkEvent(WiFiEvent_t event)
       break;
 #endif
 
-#ifdef EN_ETH
+#if defined(EN_ETH)
     case SYSTEM_EVENT_ETH_START:
       Serial.println("!DBG:AD2EMB,ETH Started");
       //set eth hostname here
@@ -346,7 +491,7 @@ void networkEvent(WiFiEvent_t event)
 }
 
 
-#ifdef EN_MQTT_CLIENT
+#if defined(EN_MQTT_CLIENT)
 /**
  * MQTT Client reporting service
  * 
@@ -366,7 +511,7 @@ void mqttSetup() {
   mqtt_clientId = "AD2ESP32Client-";
   mqtt_clientId += String(random(0xffff), HEX);
   mqttClient.setServer(SECRET_MQTT_SERVER, SECRET_MQTT_PORT);
-#ifdef SECRET_MQTT_SERVER_CERT
+#if defined(SECRET_MQTT_SERVER_CERT)
   /* set SSL/TLS certificate */
   mqttnetClient.setCACert(SECRET_MQTT_SERVER_CERT);
   // FIXME: client certificates.
@@ -439,15 +584,76 @@ void mqttLoop(uint32_t tlaps) {
         mqttClient.publish(SECRET_MQTT_ROOT_TOPIC "AD2LRR", "!INF:AD2ESP32_PING");
         mqtt_ping_delay = MQTT_CONNECT_PING_INTERVAL;
       }
-      
     }
-
-    // give the MQTT client class state machine cycles
-    mqttClient.loop();    
-
 }
-#endif // EN_MQTT_CLIENT
+#endif
 
+#if defined(EN_HTTP) || defined(EN_HTTPS)
+// The hanlder functions are the same as in the Static-Page example.
+// The only difference is the check for isSecure in the root handler
+void handleRoot(HTTPRequest * req, HTTPResponse * res) {
+  res->setHeader("Content-Type", "text/html");
+
+  res->println("<!DOCTYPE html>");
+  res->println("<html>");
+  res->println("<head>");
+  res->println("<title>AD2EmbeddedIoT web services</title>");
+  res->println("<link rel=\"Shortcut Icon\" href=\"/favicon.ico\" type=\"image/x-icon\">");
+  res->println("</head>");
+  res->println("<body>");
+  res->println("<h1>AlarmDecoder Embedded IoT web interface coming soon!</h1>");
+
+  res->print("<p>Your server is running for ");
+  res->print((int)(millis()/1000), DEC);
+  res->println(" seconds.</p>");
+
+  // You can check if you are connected over a secure connection, eg. if you
+  // want to use authentication and redirect the user to a secure connection
+  // for that
+  if (req->isSecure()) {
+    res->println("<p>You are connected via <strong>HTTPS</strong>.</p>");
+  } else {
+    res->println("<p>You are connected via <strong>HTTP</strong>.</p>");
+  }
+
+  res->println("</body>");
+  res->println("</html>");
+}
+
+void handle404(HTTPRequest * req, HTTPResponse * res) {
+  req->discardRequestBody();
+  res->setStatusCode(404);
+  res->setStatusText("Not Found");
+  res->setHeader("Content-Type", "text/html");
+  res->println("<!DOCTYPE html>");
+  res->println("<html>");
+  res->println("<head><title>Not Found</title></head>");
+  res->println("<body><h1>404 Not Found</h1><p>The requested resource was not found on this server.</p></body>");
+  res->println("</html>");
+}
+
+void handleFavicon(HTTPRequest * req, HTTPResponse * res) {
+  // Set Content-Type
+  res->setHeader("Content-Type", "image/vnd.microsoft.icon");
+  // Write data from header file
+  res->write(favicon_ico, favicon_ico_len);
+}
+
+void handleAD2icon(HTTPRequest * req, HTTPResponse * res) {
+  // Set Content-Type
+  res->setHeader("Content-Type", "image/png");
+  // Write data from header file
+  res->write(ad2icon_png, ad2icon_png_len);
+}
+
+void handleDeviceDescription(HTTPRequest * req, HTTPResponse * res) {
+  String schema;
+  SSDP.schema(schema);
+  res->setHeader("Content-Type", "text/xml");
+  res->write((uint8_t*)schema.c_str(), schema.length());
+}
+
+#endif
 
 /**
  * AlarmDecoder callbacks.

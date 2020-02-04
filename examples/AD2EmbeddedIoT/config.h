@@ -1,5 +1,6 @@
 #ifndef CONFIG_H
 #define CONFIG_H
+
 /**
  *  Enable Base features/service
  *  
@@ -7,10 +8,13 @@
  *  This will depend on the hardware code and ram space.
  */
 #define EN_ETH
-#define EN_WIFI
+//#define EN_WIFI
 #define EN_MQTT_CLIENT
-//#define EN_REST_HOST
 //#define EN_SSDP
+//#define EN_HTTP
+//#define EN_HTTPS
+//#define EN_REST
+
 
 /**
  * Base identity settings
@@ -45,7 +49,7 @@ IPAddress dhcp_fail_gw(169,254,0,1);
 
 // OLIMAX ESP32-EVB-EA HARDWARE SETTINGS
 // Connect the AD2* TX PIN to ESP32 RX PIN and AD2* RX PIN to ESP32 TX PIN
-#ifdef HW_ESP32_EVB_EA
+#if defined(HW_ESP32_EVB_EA)
  // Use UART2 on ESP32
  //#define USE_ESP32_UART2
  #ifndef USE_ESP32_UART2
