@@ -70,10 +70,10 @@
  *
  * Not in library manager.
  * cd ${home}/Arduino/libraries
- * git clone https://github.com/luc-github/ESP32SSDP.git
- *  FIXME: The library needs work.
+ * git clone https://github.com/f34rdotcom/ESP32SSDP.git
+ *  FIXME: The library needs work so I cloned it from for now.
+ *    TODO: update parent https://github.com/luc-github/ESP32SSDP.git
  *    TODO: Add ModelDescription
- *    TODO: Add ability to add a <serviceList/> section.
  *    TODO: Add ability to set uuid
  */
 #if defined(EN_SSDP)
@@ -163,6 +163,7 @@ void handleFavicon(HTTPRequest * req, HTTPResponse * res);
 void handleAD2icon(HTTPRequest * req, HTTPResponse * res);
 void handle404(HTTPRequest * req, HTTPResponse * res);
 void handleDeviceDescription(HTTPRequest * req, HTTPResponse * res);
+void handleServiceDescription(HTTPRequest * req, HTTPResponse * res);
 #endif
 
 /**
@@ -230,9 +231,9 @@ void setup()
     SSDP.setModelURL("https://github.com/nutechsoftware/alarmdecoder-embedded");
     SSDP.setManufacturer("Nu Tech Software, Solutions, Inc.");
     SSDP.setManufacturerURL("http://www.alarmdecoder.com/");
-    SSDP.setDeviceType("upnp:rootdevice"); //to appear as root device
-    //SSDP.setDeviceType("urn:schemas-upnp-org:device:Basic:1"); //to appear as root device
-
+    //SSDP.setDeviceType("upnp:rootdevice");
+    //SSDP.setDeviceType("urn:schemas-upnp-org:device:Basic:1");
+    SSDP.setDeviceType("urn:schemas-upnp-org:device:AlarmDecoder:1");
     //FIXME: set <serviceList><server>
     //FIXME: set uuid
 #endif
@@ -243,19 +244,22 @@ ResourceNode * nodeFavicon = new ResourceNode("/favicon.ico", "GET", &handleFavi
 ResourceNode * nodeAD2icon = new ResourceNode("/ad2icon.png", "GET", &handleAD2icon);
 ResourceNode * node404  = new ResourceNode("", "GET", &handle404);
 ResourceNode * nodeDeviceDescription = new ResourceNode("/device_description.xml", "GET", &handleDeviceDescription);
+ResourceNode * nodeServiceDescription = new ResourceNode("/AlarmDecoder.xml", "GET", &handleServiceDescription);
 #if defined(EN_HTTP)
   insecureServer.registerNode(nodeRoot);
   insecureServer.registerNode(nodeFavicon);
   insecureServer.registerNode(nodeAD2icon);
+  insecureServer.registerNode(nodeDeviceDescription);
+  insecureServer.registerNode(nodeServiceDescription);
   insecureServer.setDefaultNode(node404);
-  insecureServer.setDefaultNode(nodeDeviceDescription);
 #endif
 #if defined(EN_HTTPS)
   secureServer.registerNode(nodeRoot);
   secureServer.registerNode(nodeFavicon);
   secureServer.registerNode(nodeAD2icon);
+  secureServer.registerNode(nodeDeviceDescription);
+  secureServer.registerNode(nodeServiceDescription);
   secureServer.setDefaultNode(node404);
-  secureServer.setDefaultNode(nodeDeviceDescription);
 #endif
 #endif
 
@@ -646,11 +650,115 @@ void handleAD2icon(HTTPRequest * req, HTTPResponse * res) {
   res->write(ad2icon_png, ad2icon_png_len);
 }
 
+static const char _alarmdecoder_device_schema_xml[] PROGMEM =
+    "<?xml version=\"1.0\"?>"
+    "<root xmlns=\"urn:schemas-upnp-org:device-1-0\">"
+      "<specVersion>"
+        "<major>1</major>"
+        "<minor>0</minor>"
+      "</specVersion>"
+      "<device>"
+        "<deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>"
+        "<friendlyName>AlarmDecoder Embedded IoT</friendlyName>"
+        "<presentationURL>/</presentationURL>"
+        "<serialNumber>00000000</serialNumber>"
+        "<modelName>AD2ESP32</modelName>"
+        "<modelNumber>2.0</modelNumber>"
+        "<modelURL>https://github.com/nutechsoftware/alarmdecoder-embedded</modelURL>"
+        "<manufacturer>Nu Tech Software, Solutions, Inc.</manufacturer>"
+        "<manufacturerURL>http://www.AlarmDecoder.com/</manufacturerURL>"
+        "<UDN>uuid:38323636-4558-4dda-9188-cda0e60014e4</UDN>"
+        "<iconList>"
+          "<icon>"
+           "<mimetype>image/png</mimetype>"
+           "<height>32</height>"
+           "<width>32</width>"
+           "<depth>24</depth>"
+           "<url>ad2icon.png</url>"
+          "</icon>"
+        "</iconList>"
+        "<serviceList>"
+          "<service>"
+            "<serviceType>urn:schemas-upnp-org:service:AlarmDecoder:1</serviceType>"
+            "<serviceId>urn:upnp-org:serviceId:AlarmDecoder:1</serviceId>"
+            "<SCPDURL>AlarmDecoder.xml</SCPDURL>"
+            "<eventSubURL>/api/v1/alarmdecoder/event</eventSubURL>"
+            "<controlURL>/api/v1/alarmdecoder</controlURL>"
+          "</service>"
+        "</serviceList>"
+      "</device>"
+    "</root>\r\n"
+    "\r\n";
+
 void handleDeviceDescription(HTTPRequest * req, HTTPResponse * res) {
-  String schema;
-  SSDP.schema(schema);
+  // Set Content-Type
   res->setHeader("Content-Type", "text/xml");
-  res->write((uint8_t*)schema.c_str(), schema.length());
+  // Send schema
+  //String schema;
+  //SSDP.schema(schema);
+  //res->write((uint8_t*)schema.c_str(), schema.length());
+  res->print(_alarmdecoder_device_schema_xml);
+}
+
+// FIXME: sample not valid.
+static const char _alarmdecoder_service_schema_xml[] PROGMEM =
+"<?xml version=\"1.0\" encoding=\"utf-8\"?>"
+"<scpd xmlns=\"urn:schemas-upnp-org:service-1-0\">"
+  "<specVersion>"
+    "<major>1</major>"
+    "<minor>0</minor>"
+  "</specVersion>"
+  "<actionList>"
+    "<action>"
+      "<name>SetTarget</name>"
+      "<argumentList>"
+        "<argument>"
+          "<name>newTargetValue</name>"
+          "<relatedStateVariable>Target</relatedStateVariable>"
+          "<direction>in</direction>"
+        "</argument>"
+      "</argumentList>"
+    "</action>"
+    "<action>"
+      "<name>GetTarget</name>"
+      "<argumentList>"
+        "<argument>"
+          "<name>RetTargetValue</name>"
+          "<relatedStateVariable>Target</relatedStateVariable>"
+          "<direction>out</direction>"
+        "</argument>"
+      "</argumentList>"
+    "</action>"
+    "<action>"
+      "<name>GetStatus</name>"
+      "<argumentList>"
+        "<argument>"
+          "<name>ResultStatus</name>"
+          "<relatedStateVariable>Status</relatedStateVariable>"
+          "<direction>out</direction>"
+        "</argument>"
+      "</argumentList>"
+    "</action>"
+  "</actionList>"
+  "<serviceStateTable>"
+    "<stateVariable sendEvents=\"no\">"
+      "<name>Target</name>"
+      "<dataType>boolean</dataType>"
+      "<defaultValue>0</defaultValue>"
+    "</stateVariable>"
+    "<stateVariable sendEvents=\"yes\">"
+      "<name>Status</name>"
+      "<dataType>boolean</dataType>"
+      "<defaultValue>0</defaultValue>"
+    "</stateVariable>"
+  "</serviceStateTable>"
+"</scpd>";
+
+void handleServiceDescription(HTTPRequest * req, HTTPResponse * res) {
+  // Set Content-Type
+  res->setHeader("Content-Type", "text/xml");
+  // Write data from header file
+  res->print(_alarmdecoder_service_schema_xml);
 }
 
 #endif
