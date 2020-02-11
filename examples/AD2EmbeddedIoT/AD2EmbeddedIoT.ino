@@ -194,13 +194,17 @@ void setup()
   Serial2.setRxBufferSize(2048);
 #endif
 
+#if defined(EN_ETH) || defined(EN_WIFI)
+  WiFi.onEvent(networkEvent);
+#endif
+
 #if defined(EN_ETH)
   // Start ethernet
   Serial.println("!DBG:AD2EMB,ETH Start wait for interface ready.");
   ETH.begin();
-
   // Static IP or DHCP?
   if (static_ip != (uint32_t)0x00000000) {
+      Serial.println("!DBG:AD2EMB,ETH setting static IP.");
       ETH.config(static_ip, static_gw, static_subnet, static_dns1, static_dns2);
   }  
 #endif
@@ -209,7 +213,6 @@ void setup()
   // Start wifi
   Serial.println("!DBG:AD2EMB,WiFi Start. Wait for interface.");
   WiFi.disconnect(true);
-  WiFi.onEvent(networkEvent);
   WiFi.begin(SECRET_WIFI_SSID, SECRET_WIFI_PASS);
 #endif
 
