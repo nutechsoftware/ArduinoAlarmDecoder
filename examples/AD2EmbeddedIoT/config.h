@@ -74,4 +74,128 @@ IPAddress dhcp_fail_gw(169,254,0,1);
 #define MQTT_CONNECT_PING_INTERVAL 60000   // every 60 seconds
 #endif
 
+/**
+ * HTTP/HTTPS setings
+ */
+#if defined(EN_HTTP) || defined(EN_HTTPS)
+static const char _alarmdecoder_root_html[] PROGMEM =
+"<!DOCTYPE html>"
+"<html>"
+"<head>"
+"<title>AD2EmbeddedIoT web services</title>"
+"<link rel=\"Shortcut Icon\" href=\"/favicon.ico\" type=\"image/x-icon\">"
+"</head>"
+"<body>"
+"<h1>AlarmDecoder Embedded IoT web interface coming soon!</h1>"
+"<p>Your server is running for %i seconds.</p>"
+"<p>You are connected via <strong>%s</strong>.</p>"
+"</body>"
+"</html>";
+
+static const char _alarmdecoder_404_html[] PROGMEM =
+"<!DOCTYPE html>"
+"<html>"
+"<head><title>Not Found</title></head>"
+"<body><h1>404 Not Found</h1><p>The requested resource was not found on this server.</p></body>"
+"</html>";
+#endif
+
+/**
+ * SSDP setings
+ */
+#if defined(EN_SSDP)
+static const char _alarmdecoder_device_schema_xml[] PROGMEM =
+"<?xml version=\"1.0\"?>"
+"<root xmlns=\"urn:schemas-upnp-org:device-1-0\">"
+  "<specVersion>"
+    "<major>1</major>"
+    "<minor>0</minor>"
+  "</specVersion>"
+  "<device>"
+    "<deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>"
+    "<friendlyName>AlarmDecoder Embedded IoT</friendlyName>"
+    "<presentationURL>/</presentationURL>"
+    "<serialNumber>00000000</serialNumber>"
+    "<modelName>AD2ESP32</modelName>"
+    "<modelNumber>2.0</modelNumber>"
+    "<modelURL>https://github.com/nutechsoftware/alarmdecoder-embedded</modelURL>"
+    "<manufacturer>Nu Tech Software, Solutions, Inc.</manufacturer>"
+    "<manufacturerURL>http://www.AlarmDecoder.com/</manufacturerURL>"
+    "<UDN>uuid:38323636-4558-4dda-9188-cda0e60014e4</UDN>"
+    "<iconList>"
+      "<icon>"
+       "<mimetype>image/png</mimetype>"
+       "<height>32</height>"
+       "<width>32</width>"
+       "<depth>24</depth>"
+       "<url>ad2icon.png</url>"
+      "</icon>"
+    "</iconList>"
+    "<serviceList>"
+      "<service>"
+        "<serviceType>urn:schemas-upnp-org:service:AlarmDecoder:1</serviceType>"
+        "<serviceId>urn:upnp-org:serviceId:AlarmDecoder:1</serviceId>"
+        "<SCPDURL>AlarmDecoder.xml</SCPDURL>"
+        "<eventSubURL>/api/v1/alarmdecoder/event</eventSubURL>"
+        "<controlURL>/api/v1/alarmdecoder</controlURL>"
+      "</service>"
+    "</serviceList>"
+  "</device>"
+"</root>\r\n"
+"\r\n";
+
+// FIXME: sample not valid.
+static const char _alarmdecoder_service_schema_xml[] PROGMEM =
+"<?xml version=\"1.0\" encoding=\"utf-8\"?>"
+"<scpd xmlns=\"urn:schemas-upnp-org:service-1-0\">"
+  "<specVersion>"
+    "<major>1</major>"
+    "<minor>0</minor>"
+  "</specVersion>"
+  "<actionList>"
+    "<action>"
+      "<name>SetTarget</name>"
+      "<argumentList>"
+        "<argument>"
+          "<name>newTargetValue</name>"
+          "<relatedStateVariable>Target</relatedStateVariable>"
+          "<direction>in</direction>"
+        "</argument>"
+      "</argumentList>"
+    "</action>"
+    "<action>"
+      "<name>GetTarget</name>"
+      "<argumentList>"
+        "<argument>"
+          "<name>RetTargetValue</name>"
+          "<relatedStateVariable>Target</relatedStateVariable>"
+          "<direction>out</direction>"
+        "</argument>"
+      "</argumentList>"
+    "</action>"
+    "<action>"
+      "<name>GetStatus</name>"
+      "<argumentList>"
+        "<argument>"
+          "<name>ResultStatus</name>"
+          "<relatedStateVariable>Status</relatedStateVariable>"
+          "<direction>out</direction>"
+        "</argument>"
+      "</argumentList>"
+    "</action>"
+  "</actionList>"
+  "<serviceStateTable>"
+    "<stateVariable sendEvents=\"no\">"
+      "<name>Target</name>"
+      "<dataType>boolean</dataType>"
+      "<defaultValue>0</defaultValue>"
+    "</stateVariable>"
+    "<stateVariable sendEvents=\"yes\">"
+      "<name>Status</name>"
+      "<dataType>boolean</dataType>"
+      "<defaultValue>0</defaultValue>"
+    "</stateVariable>"
+  "</serviceStateTable>"
+"</scpd>";
+#endif // EN_SSDP
 #endif // CONFIG_H

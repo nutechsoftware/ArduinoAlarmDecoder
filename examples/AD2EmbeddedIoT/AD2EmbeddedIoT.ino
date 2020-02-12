@@ -600,31 +600,8 @@ void mqttLoop(uint32_t tlaps) {
 // The only difference is the check for isSecure in the root handler
 void handleRoot(HTTPRequest * req, HTTPResponse * res) {
   res->setHeader("Content-Type", "text/html");
-
-  res->println("<!DOCTYPE html>");
-  res->println("<html>");
-  res->println("<head>");
-  res->println("<title>AD2EmbeddedIoT web services</title>");
-  res->println("<link rel=\"Shortcut Icon\" href=\"/favicon.ico\" type=\"image/x-icon\">");
-  res->println("</head>");
-  res->println("<body>");
-  res->println("<h1>AlarmDecoder Embedded IoT web interface coming soon!</h1>");
-
-  res->print("<p>Your server is running for ");
-  res->print((int)(millis()/1000), DEC);
-  res->println(" seconds.</p>");
-
-  // You can check if you are connected over a secure connection, eg. if you
-  // want to use authentication and redirect the user to a secure connection
-  // for that
-  if (req->isSecure()) {
-    res->println("<p>You are connected via <strong>HTTPS</strong>.</p>");
-  } else {
-    res->println("<p>You are connected via <strong>HTTP</strong>.</p>");
-  }
-
-  res->println("</body>");
-  res->println("</html>");
+  // Send content
+  res->printf(_alarmdecoder_root_html,(int)(millis()/1000),req->isSecure() ? "HTTPS" : "HTTP");
 }
 
 void handle404(HTTPRequest * req, HTTPResponse * res) {
@@ -632,67 +609,26 @@ void handle404(HTTPRequest * req, HTTPResponse * res) {
   res->setStatusCode(404);
   res->setStatusText("Not Found");
   res->setHeader("Content-Type", "text/html");
-  res->println("<!DOCTYPE html>");
-  res->println("<html>");
-  res->println("<head><title>Not Found</title></head>");
-  res->println("<body><h1>404 Not Found</h1><p>The requested resource was not found on this server.</p></body>");
-  res->println("</html>");
+  // Send content
+  res->print(_alarmdecoder_404_html);
 }
 
 void handleFavicon(HTTPRequest * req, HTTPResponse * res) {
   // Set Content-Type
   res->setHeader("Content-Type", "image/vnd.microsoft.icon");
-  // Write data from header file
+  // Send content
   res->write(favicon_ico, favicon_ico_len);
 }
 
 void handleAD2icon(HTTPRequest * req, HTTPResponse * res) {
   // Set Content-Type
   res->setHeader("Content-Type", "image/png");
-  // Write data from header file
+  // Send content
   res->write(ad2icon_png, ad2icon_png_len);
 }
 
-static const char _alarmdecoder_device_schema_xml[] PROGMEM =
-    "<?xml version=\"1.0\"?>"
-    "<root xmlns=\"urn:schemas-upnp-org:device-1-0\">"
-      "<specVersion>"
-        "<major>1</major>"
-        "<minor>0</minor>"
-      "</specVersion>"
-      "<device>"
-        "<deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>"
-        "<friendlyName>AlarmDecoder Embedded IoT</friendlyName>"
-        "<presentationURL>/</presentationURL>"
-        "<serialNumber>00000000</serialNumber>"
-        "<modelName>AD2ESP32</modelName>"
-        "<modelNumber>2.0</modelNumber>"
-        "<modelURL>https://github.com/nutechsoftware/alarmdecoder-embedded</modelURL>"
-        "<manufacturer>Nu Tech Software, Solutions, Inc.</manufacturer>"
-        "<manufacturerURL>http://www.AlarmDecoder.com/</manufacturerURL>"
-        "<UDN>uuid:38323636-4558-4dda-9188-cda0e60014e4</UDN>"
-        "<iconList>"
-          "<icon>"
-           "<mimetype>image/png</mimetype>"
-           "<height>32</height>"
-           "<width>32</width>"
-           "<depth>24</depth>"
-           "<url>ad2icon.png</url>"
-          "</icon>"
-        "</iconList>"
-        "<serviceList>"
-          "<service>"
-            "<serviceType>urn:schemas-upnp-org:service:AlarmDecoder:1</serviceType>"
-            "<serviceId>urn:upnp-org:serviceId:AlarmDecoder:1</serviceId>"
-            "<SCPDURL>AlarmDecoder.xml</SCPDURL>"
-            "<eventSubURL>/api/v1/alarmdecoder/event</eventSubURL>"
-            "<controlURL>/api/v1/alarmdecoder</controlURL>"
-          "</service>"
-        "</serviceList>"
-      "</device>"
-    "</root>\r\n"
-    "\r\n";
 
+#if defined(EN_SSDP)
 void handleDeviceDescription(HTTPRequest * req, HTTPResponse * res) {
   // Set Content-Type
   res->setHeader("Content-Type", "text/xml");
@@ -703,68 +639,14 @@ void handleDeviceDescription(HTTPRequest * req, HTTPResponse * res) {
   res->print(_alarmdecoder_device_schema_xml);
 }
 
-// FIXME: sample not valid.
-static const char _alarmdecoder_service_schema_xml[] PROGMEM =
-"<?xml version=\"1.0\" encoding=\"utf-8\"?>"
-"<scpd xmlns=\"urn:schemas-upnp-org:service-1-0\">"
-  "<specVersion>"
-    "<major>1</major>"
-    "<minor>0</minor>"
-  "</specVersion>"
-  "<actionList>"
-    "<action>"
-      "<name>SetTarget</name>"
-      "<argumentList>"
-        "<argument>"
-          "<name>newTargetValue</name>"
-          "<relatedStateVariable>Target</relatedStateVariable>"
-          "<direction>in</direction>"
-        "</argument>"
-      "</argumentList>"
-    "</action>"
-    "<action>"
-      "<name>GetTarget</name>"
-      "<argumentList>"
-        "<argument>"
-          "<name>RetTargetValue</name>"
-          "<relatedStateVariable>Target</relatedStateVariable>"
-          "<direction>out</direction>"
-        "</argument>"
-      "</argumentList>"
-    "</action>"
-    "<action>"
-      "<name>GetStatus</name>"
-      "<argumentList>"
-        "<argument>"
-          "<name>ResultStatus</name>"
-          "<relatedStateVariable>Status</relatedStateVariable>"
-          "<direction>out</direction>"
-        "</argument>"
-      "</argumentList>"
-    "</action>"
-  "</actionList>"
-  "<serviceStateTable>"
-    "<stateVariable sendEvents=\"no\">"
-      "<name>Target</name>"
-      "<dataType>boolean</dataType>"
-      "<defaultValue>0</defaultValue>"
-    "</stateVariable>"
-    "<stateVariable sendEvents=\"yes\">"
-      "<name>Status</name>"
-      "<dataType>boolean</dataType>"
-      "<defaultValue>0</defaultValue>"
-    "</stateVariable>"
-  "</serviceStateTable>"
-"</scpd>";
-
 void handleServiceDescription(HTTPRequest * req, HTTPResponse * res) {
   // Set Content-Type
   res->setHeader("Content-Type", "text/xml");
   // Write data from header file
-  res->print(_alarmdecoder_service_schema_xml);
+  res->printf(_alarmdecoder_service_schema_xml);
 }
-
-#endif
+#endif // EN_SSDP
+#endif // EN_HTTP || EN_HTTPS
 
 /**
  * AlarmDecoder callbacks.
