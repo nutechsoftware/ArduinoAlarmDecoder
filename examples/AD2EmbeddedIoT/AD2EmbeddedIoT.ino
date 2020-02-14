@@ -169,6 +169,8 @@ void handleAD2icon(HTTPRequest * req, HTTPResponse * res);
 void handle404(HTTPRequest * req, HTTPResponse * res);
 void handleDeviceDescription(HTTPRequest * req, HTTPResponse * res);
 void handleServiceDescription(HTTPRequest * req, HTTPResponse * res);
+void handleEventSUBSCRIBE(HTTPRequest * req, HTTPResponse * res);
+void handleEventUNSUBSCRIBE(HTTPRequest * req, HTTPResponse * res);
 #endif
 
 /**
@@ -256,12 +258,16 @@ ResourceNode * nodeAD2icon = new ResourceNode("/ad2icon.png", "GET", &handleAD2i
 ResourceNode * node404  = new ResourceNode("", "GET", &handle404);
 ResourceNode * nodeDeviceDescription = new ResourceNode("/device_description.xml", "GET", &handleDeviceDescription);
 ResourceNode * nodeServiceDescription = new ResourceNode("/AlarmDecoder.xml", "GET", &handleServiceDescription);
+ResourceNode * nodeEventSUBSCRIBE = new ResourceNode("/alarmdecoder/event", "SUBSCRIBE", &handleEventSUBSCRIBE);
+ResourceNode * nodeEventUNSUBSCRIBE = new ResourceNode("/alarmdecoder/event", "UNSUBSCRIBE", &handleEventUNSUBSCRIBE);
 #if defined(EN_HTTP)
   insecureServer.registerNode(nodeRoot);
   insecureServer.registerNode(nodeFavicon);
   insecureServer.registerNode(nodeAD2icon);
   insecureServer.registerNode(nodeDeviceDescription);
   insecureServer.registerNode(nodeServiceDescription);
+  insecureServer.registerNode(nodeEventSUBSCRIBE);
+  insecureServer.registerNode(nodeEventUNSUBSCRIBE);
   insecureServer.setDefaultNode(node404);
 #endif
 #if defined(EN_HTTPS)
@@ -574,7 +580,9 @@ bool mqttConnect() {
     if (mqttClient.connect(mqtt_clientId.c_str(), SECRET_MQTT_USER, SECRET_MQTT_PASS)) {
       Serial.println("connected");
       mqttClient.subscribe("AD2LRR");
-      mqttClient.publish(SECRET_MQTT_ROOT_TOPIC "AD2LRR", "!LRR:008,1,CID_3123,ff");
+      if (!mqttClient.publish(SECRET_MQTT_ROOT_TOPIC "AD2LRR", "!LRR:008,1,CID_3123,ff")) {
+        Serial.printf("!DBG:AD2EMB,MQTT publish SIGNON fail rc(%i)\n", mqttClient.state());
+      }
     } else {
       Serial.print(" failed, client.connect() rc=");
       Serial.println(mqttClient.state());
@@ -597,6 +605,7 @@ void mqttLoop(uint32_t tlaps) {
 
     if (!mqttClient.connected()) {
       if (!mqtt_reconnect_delay) {
+        Serial.printf("!DBG:AD2EMB,MQTT connection closed rc(%i) reconnect delay starting\n", mqttClient.state());
         mqtt_reconnect_delay = MQTT_CONNECT_RETRY_INTERVAL;
       } else {
         mqtt_reconnect_delay -= tlaps;
@@ -613,8 +622,9 @@ void mqttLoop(uint32_t tlaps) {
     } else {
       if (!mqtt_signon_sent) {
         Serial.println("!DBG:AD2EMB,MQTT publish AD2LRR:TEST");
-        mqttClient.publish(SECRET_MQTT_ROOT_TOPIC "AD2LRR", "!LRR:008,1,CID_1123,ff");
-
+        if (!mqttClient.publish(SECRET_MQTT_ROOT_TOPIC "AD2LRR", "!LRR:008,1,CID_1123,ff")) {
+          Serial.printf("!DBG:AD2EMB,MQTT publish TEST fail rc(%i)\n", mqttClient.state());
+        }
         mqtt_signon_sent = 1;
       }
 
@@ -623,7 +633,9 @@ void mqttLoop(uint32_t tlaps) {
       mqtt_ping_delay -= tlaps;      
       if (mqtt_ping_delay<=0) {
         Serial.println("!DBG:AD2EMB,MQTT publish AD2LRR:AD2ESP32_PING");
-        mqttClient.publish(SECRET_MQTT_ROOT_TOPIC "AD2LRR", "!INF:AD2ESP32_PING");
+        if (!mqttClient.publish(SECRET_MQTT_ROOT_TOPIC "AD2LRR", "!INF:AD2ESP32_PING")) {
+          Serial.printf("!DBG:AD2EMB,MQTT publish PING fail rc(%i)\n", mqttClient.state());
+        }
         mqtt_ping_delay = MQTT_CONNECT_PING_INTERVAL;
       }
     }
@@ -675,6 +687,20 @@ void handleDeviceDescription(HTTPRequest * req, HTTPResponse * res) {
 }
 
 void handleServiceDescription(HTTPRequest * req, HTTPResponse * res) {
+  // Set Content-Type
+  res->setHeader("Content-Type", "text/xml");
+  // Write data from header file
+  res->printf(_alarmdecoder_service_schema_xml);
+}
+
+void handleEventSUBSCRIBE(HTTPRequest * req, HTTPResponse * res) {
+  // Set Content-Type
+  res->setHeader("Content-Type", "text/xml");
+  // Write data from header file
+  res->printf(_alarmdecoder_service_schema_xml);
+}
+
+void handleEventUNSUBSCRIBE(HTTPRequest * req, HTTPResponse * res) {
   // Set Content-Type
   res->setHeader("Content-Type", "text/xml");
   // Write data from header file
