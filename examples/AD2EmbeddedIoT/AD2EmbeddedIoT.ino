@@ -61,6 +61,7 @@
  */
 #if defined(EN_MQTT_CLIENT)
 // PubSubClient v2.6.0 by Nick O'Leary
+// Library manager 'PubSubClient'
 // https://github.com/knolleary/pubsubclient
 #include <PubSubClient.h>
 #endif // EN_MQTT_CLIENT
@@ -83,6 +84,7 @@
 
 /**
  * HTTPServer/HTTPServer server  v0.3.1 by Frank Hessel
+ * Library manager 'esp32_https_server'
  * https://github.com/fhessel/esp32_https_server
  */
 #if defined(EN_HTTP)
@@ -108,6 +110,9 @@
 // Network state variables.
 static bool eth_connected = false;
 static bool wifi_connected = false;
+#if defined(EN_WIFI)
+static bool wifi_ready = false;
+#endif
 
 // time/delay tracking
 static uint32_t time_now = 0;
@@ -200,18 +205,21 @@ void setup()
 
 #if defined(EN_ETH)
   // Start ethernet
-  Serial.println("!DBG:AD2EMB,ETH Start wait for interface ready.");
+  Serial.println("!DBG:AD2EMB,ETH Start wait for interface ready");
   ETH.begin();
+  ETH.setHostname(BASE_HOST_NAME);  
   // Static IP or DHCP?
   if (static_ip != (uint32_t)0x00000000) {
-      Serial.println("!DBG:AD2EMB,ETH setting static IP.");
+      Serial.println("!DBG:AD2EMB,ETH setting static IP");
       ETH.config(static_ip, static_gw, static_subnet, static_dns1, static_dns2);
   }  
 #endif
 
 #if defined(EN_WIFI)
   // Start wifi
-  Serial.println("!DBG:AD2EMB,WiFi Start. Wait for interface.");
+  Serial.println("!DBG:AD2EMB,WiFi Start. Wait for interface");
+  WiFi.setHostname(BASE_HOST_NAME);
+  WiFi.mode(WIFI_STA);
   WiFi.disconnect(true);
   WiFi.begin(SECRET_WIFI_SSID, SECRET_WIFI_PASS);
 #endif
@@ -303,6 +311,23 @@ void networkLoop() {
 
   // calculate time since the end of the last loop.
   uint32_t tlaps = (millis() - time_now);
+
+
+#if defined(EN_WIFI)
+  static int32_t wifi_reconnect_delay = 0;
+  if (wifi_ready && !wifi_connected) {
+    if (!wifi_reconnect_delay) {
+      wifi_reconnect_delay = WIFI_CONNECT_RETRY_INTERVAL;
+    } else {
+      wifi_reconnect_delay -= tlaps;
+      if (wifi_reconnect_delay<=0){
+        wifi_reconnect_delay = 0;
+        Serial.println("!DBG:AD2EMB,STA Connecting");
+        WiFi.reconnect();
+      }
+    }
+  }
+#endif
 
   // if we have an interface active process network service states
   if (eth_connected || wifi_connected) {
@@ -438,11 +463,12 @@ void networkEvent(WiFiEvent_t event)
 #if defined(EN_WIFI)
     case SYSTEM_EVENT_WIFI_READY: 
       Serial.println("!DBG:AD2EMB,WiFi interface ready");
-      WiFi.setHostname(BASE_HOST_NAME);
+      wifi_ready = true;
       break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
       Serial.println("!DBG:AD2EMB,STA Disconnected");
       wifi_connected = false;
+      closeConnections();
       break;
     case SYSTEM_EVENT_STA_CONNECTED:
       Serial.println("!DBG:AD2EMB,STA Connected");
@@ -463,8 +489,6 @@ void networkEvent(WiFiEvent_t event)
 #if defined(EN_ETH)
     case SYSTEM_EVENT_ETH_START:
       Serial.println("!DBG:AD2EMB,ETH Started");
-      //set eth hostname here
-      ETH.setHostname(BASE_HOST_NAME);
       break;
     case SYSTEM_EVENT_ETH_CONNECTED:
       Serial.println("!DBG:AD2EMB,ETH Connected");
@@ -497,6 +521,17 @@ void networkEvent(WiFiEvent_t event)
   }
 }
 
+/**
+ * If wifi or network drop close all outbound connections.
+ */
+void closeConnections() {
+Serial.println("!DBG:AD2EMB,Network reset close all connections");
+#if defined(EN_MQTT_CLIENT)
+  if (mqttClient.connected()) {
+    mqttClient.disconnect();
+  }
+#endif
+}
 
 #if defined(EN_MQTT_CLIENT)
 /**

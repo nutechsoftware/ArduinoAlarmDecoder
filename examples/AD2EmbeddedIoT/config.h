@@ -64,7 +64,12 @@ IPAddress dhcp_fail_gw(169,254,0,1);
  #endif
 #endif
 
-// 
+/**
+ * Base WiFi settings
+ */
+#if defined(EN_WIFI)
+#define WIFI_CONNECT_RETRY_INTERVAL 8000   // 8 seconds
+#endif
 
 /**
  * Base MQTT settings
