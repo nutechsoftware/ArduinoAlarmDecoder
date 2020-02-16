@@ -35,6 +35,11 @@ int AD2_SOCKPORT = 10000;
  *  select an MQTT server profile.
  */
 
+// Unique ID for this AD2EMB device (FIXME USE NVRAM for this setting)
+// must be unique and complex to avoid collisions on the network
+// current max is 23 bytes.
+#define SECRET_MQTT_CLIENT_ID "a952d8f4-5077-11ea-8d77"
+
 // PASS: mosquitto.org clear text
 #define MQTT_SERVER_CLEARTEXT_TEST_MOSQUITTO_ORG
 

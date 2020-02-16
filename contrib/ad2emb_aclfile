@@ -1,0 +1,13 @@
+####
+# ad2emb_aclfile
+# Only allow client to post to its own topic no one else except
+# authroized monitoring users.
+
+## Only allow client to post to its own topic no one else except authroized monitoring users.
+pattern write AD2EMB/%c/STREAM/#
+pattern read AD2EMB/%c/CONTROL/#
+pattern write AD2EMB/%c/EVENT/PING
+user admin
+topic read AD2EMB/+/STREAM/#
+topic read AD2EMB/+/EVENT/PING
+topic write AD2EMB/+/CONTROL/#

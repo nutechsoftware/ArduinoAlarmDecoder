@@ -19,7 +19,7 @@
 /**
  * Base identity settings
  */
-#define BASE_HOST_NAME  "AD2ESP32"
+#define BASE_HOST_NAME  "AD2EMB"
 
 /**
  * Base network settings
@@ -73,23 +73,28 @@ IPAddress dhcp_fail_gw(169,254,0,1);
 
 /**
  * Base MQTT settings
- * /SECRETROOT/AD2EMB_PATH/[CONTROL|STREAM]/FOO
+ * [/SECRETROOT/]AD2EMB_PATH/[CONTROL|STREAM|EVENT]/FOO
  *
  * Test with mosquitto client capture all STREAM topics
- *   mosquitto_sub  -t 'AD2EMB/STREAM/+' -h localhost -d
+ *   // subscribe all STREAM sub tree for a specific client
+ *   mosquitto_sub -u admin -P admin -t 'AD2EMB/{CLIENT ID}/STREAM/+' -h localhost -d
+ *   // Admin listen to all clients for PING
+ *   mosquitto_sub -u admin -P admin -t 'AD2EMP/+/EVENT/PING'
  */
 #if defined(EN_MQTT_CLIENT)
 #define MQTT_CONNECT_RETRY_INTERVAL 5000    // reconnect attempt every 5 seconds
 #define MQTT_CONNECT_PING_INTERVAL 60000    // Publish PING to subscribers every 60 seconds
-#define MQTT_AD2EMB_PATH    "AD2EMB/"
+#define MQTT_AD2EMB_PATH BASE_HOST_NAME "/"
+// input topics
 #define MQTT_CMD_SUB_TOPIC  "CONTROL/CMD"   // Subscribe for remote control. Arm/Disarm, Compass, configuration, etc.
-#define MQTT_PING_PUB_TOPIC "STREAM/PING"   // Client sends a PING to subscribers to notify them the client is alive.
-#define MQTT_LRR_PUB_TOPIC  "STREAM/LRR"    // LRR message topic
-#define MQTT_KPM_PUB_TOPIC  "STREAM/KPM"    // Keypad message and state bits topic "Armed ready to arm etc"
-#define MQTT_AUI_PUB_TOPIC  "STREAM/AUI"    // AUI message topic
-#define MQTT_RFX_PUB_TOPIC  "STREAM/RFX"    // RFX message topic
-#define MQTT_REL_PUB_TOPIC  "STREAM/REL"    // Relay message topic
-#define MQTT_EXP_PUB_TOPIC  "STREAM/EXP"    // Expander message topic
+// output topics
+#define MQTT_PING_PUB_TOPIC  "EVENT/PING"   // Client sends a PING event with ID to notify subscriber(admin) the client is alive.
+#define MQTT_LRR_PUB_TOPIC   "STREAM/LRR"   // LRR message topic
+#define MQTT_KPM_PUB_TOPIC   "STREAM/KPM"   // Keypad message and state bits topic "Armed ready to arm etc"
+#define MQTT_AUI_PUB_TOPIC   "STREAM/AUI"   // AUI message topic
+#define MQTT_RFX_PUB_TOPIC   "STREAM/RFX"   // RFX message topic
+#define MQTT_REL_PUB_TOPIC   "STREAM/REL"   // Relay message topic
+#define MQTT_EXP_PUB_TOPIC   "STREAM/EXP"   // Expander message topic
 #endif
 
 /**

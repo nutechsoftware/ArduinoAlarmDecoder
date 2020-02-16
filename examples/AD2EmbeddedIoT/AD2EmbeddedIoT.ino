@@ -137,7 +137,7 @@ WiFiClient mqttnetClient;
 #endif
 PubSubClient mqttClient(mqttnetClient);
 String mqtt_clientId;
-#define MQTT_ROOT SECRET_MQTT_ROOT MQTT_AD2EMB_PATH
+#define MQTT_ROOT SECRET_MQTT_ROOT MQTT_AD2EMB_PATH SECRET_MQTT_CLIENT_ID "/"
 #endif // EN_MQTT_CLIENT
 
 // SSDP service
@@ -557,9 +557,9 @@ Serial.println("!DBG:AD2EMB,Network reset close all connections");
  * MQTT setup
  */
 void mqttSetup() {
-  mqtt_clientId = "AD2ESP32Client-";
-  mqtt_clientId += String(random(0xffff), HEX);
+  mqtt_clientId = SECRET_MQTT_CLIENT_ID;
   mqttClient.setServer(SECRET_MQTT_SERVER, SECRET_MQTT_PORT);
+  mqttClient.setCallback(mqttCallback);
 #if defined(SECRET_MQTT_SERVER_CERT)
   /* set SSL/TLS certificate */
   mqttnetClient.setCACert(SECRET_MQTT_SERVER_CERT);
@@ -567,6 +567,13 @@ void mqttSetup() {
   /// client.setCertificate
   /// client.setPrivateKey
 #endif
+}
+
+/**
+ * MQTT message callback
+ */
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  Serial.printf("!DBG:AD2EMB,MQTT RX topic: '%s' payload: '%.*s'\n", topic, length, payload);
 }
 
 /**
@@ -580,8 +587,9 @@ bool mqttConnect() {
     // Attempt to connect
     if (mqttClient.connect(mqtt_clientId.c_str(), SECRET_MQTT_USER, SECRET_MQTT_PASS)) {
       Serial.println("connected");
-      if (!mqttClient.publish(MQTT_ROOT MQTT_LRR_PUB_TOPIC, "!LRR:008,1,CID_3123,ff")) {
-        Serial.printf("!DBG:AD2EMB,MQTT publish SIGNON fail rc(%i)\n", mqttClient.state());
+      // Subscribe to command input topic
+      if (!mqttClient.subscribe(MQTT_ROOT MQTT_CMD_SUB_TOPIC)) {
+        Serial.printf("!DBG:AD2EMB,MQTT subscribe to CMD topic failed rc(%i)\n", mqttClient.state());
       }
     } else {
       Serial.print(" failed, client.connect() rc=");
@@ -609,6 +617,7 @@ void mqttLoop(uint32_t tlaps) {
     mqttClient.loop();
 
     if (!mqttClient.connected()) {
+      mqtt_signon_sent = 0;
       if (!mqtt_reconnect_delay) {
         Serial.printf("!DBG:AD2EMB,MQTT connection closed rc(%i) reconnect delay starting\n", mqttClient.state());
         mqtt_reconnect_delay = MQTT_CONNECT_RETRY_INTERVAL;
@@ -621,13 +630,14 @@ void mqttLoop(uint32_t tlaps) {
           }
         }
         if (mqttClient.connected()) {
-          mqtt_ping_delay = MQTT_CONNECT_PING_INTERVAL;
+          // force PING to notify subscriber(s) of this client id.
+          mqtt_ping_delay = 0;
         }
       }
     } else {
       if (!mqtt_signon_sent) {
         Serial.println("!DBG:AD2EMB,MQTT publish AD2LRR:TEST");
-        if (!mqttClient.publish(MQTT_ROOT MQTT_LRR_PUB_TOPIC, "!LRR:008,1,CID_1123,ff")) {
+        if (!mqttClient.publish(MQTT_ROOT MQTT_LRR_PUB_TOPIC, "!LRR:008,1,CID_3998,ff")) {
           Serial.printf("!DBG:AD2EMB,MQTT publish TEST fail rc(%i)\n", mqttClient.state());
         }
         mqtt_signon_sent = 1;
@@ -638,7 +648,7 @@ void mqttLoop(uint32_t tlaps) {
       mqtt_ping_delay -= tlaps;
       if (mqtt_ping_delay<=0) {
         Serial.println("!DBG:AD2EMB,MQTT publish AD2EMB-PING:PING");
-        if (!mqttClient.publish(MQTT_ROOT MQTT_PING_PUB_TOPIC, "!INF:PING SOME_ID")) {
+        if (!mqttClient.publish(MQTT_ROOT MQTT_PING_PUB_TOPIC, SECRET_MQTT_CLIENT_ID)) {
           Serial.printf("!DBG:AD2EMB,MQTT publish PING fail rc(%i)\n", mqttClient.state());
         }
         mqtt_ping_delay = MQTT_CONNECT_PING_INTERVAL;
