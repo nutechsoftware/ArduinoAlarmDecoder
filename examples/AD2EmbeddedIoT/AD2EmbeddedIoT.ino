@@ -137,6 +137,7 @@ WiFiClient mqttnetClient;
 #endif
 PubSubClient mqttClient(mqttnetClient);
 String mqtt_clientId;
+#define MQTT_ROOT SECRET_MQTT_ROOT MQTT_AD2EMB_PATH
 #endif // EN_MQTT_CLIENT
 
 // SSDP service
@@ -579,8 +580,7 @@ bool mqttConnect() {
     // Attempt to connect
     if (mqttClient.connect(mqtt_clientId.c_str(), SECRET_MQTT_USER, SECRET_MQTT_PASS)) {
       Serial.println("connected");
-      mqttClient.subscribe("AD2LRR");
-      if (!mqttClient.publish(SECRET_MQTT_ROOT_TOPIC "AD2LRR", "!LRR:008,1,CID_3123,ff")) {
+      if (!mqttClient.publish(MQTT_ROOT MQTT_LRR_PUB_TOPIC, "!LRR:008,1,CID_3123,ff")) {
         Serial.printf("!DBG:AD2EMB,MQTT publish SIGNON fail rc(%i)\n", mqttClient.state());
       }
     } else {
@@ -588,6 +588,8 @@ bool mqttConnect() {
       Serial.println(mqttClient.state());
       res = false;
     }
+  } else {
+    Serial.println("!DBG:AD2EMB,Warning reconnect when already connected");
   }
   return res;
 }
@@ -596,12 +598,15 @@ bool mqttConnect() {
  * Process MQTT state
  */
 void mqttLoop(uint32_t tlaps) {
-      /// delay: counters must be signed to easily detect overflow by going negative
+    /// delay: counters must be signed to easily detect overflow by going negative
     static int32_t mqtt_reconnect_delay = 0;
     static int32_t mqtt_ping_delay = 0;
   
     /// state: fire off a message on first connect.
     static uint8_t mqtt_signon_sent = 0;
+
+    /// give the mqtt library some time to process.
+    mqttClient.loop();
 
     if (!mqttClient.connected()) {
       if (!mqtt_reconnect_delay) {
@@ -622,7 +627,7 @@ void mqttLoop(uint32_t tlaps) {
     } else {
       if (!mqtt_signon_sent) {
         Serial.println("!DBG:AD2EMB,MQTT publish AD2LRR:TEST");
-        if (!mqttClient.publish(SECRET_MQTT_ROOT_TOPIC "AD2LRR", "!LRR:008,1,CID_1123,ff")) {
+        if (!mqttClient.publish(MQTT_ROOT MQTT_LRR_PUB_TOPIC, "!LRR:008,1,CID_1123,ff")) {
           Serial.printf("!DBG:AD2EMB,MQTT publish TEST fail rc(%i)\n", mqttClient.state());
         }
         mqtt_signon_sent = 1;
@@ -630,10 +635,10 @@ void mqttLoop(uint32_t tlaps) {
 
       // See if we have a host subscribing to AD2LRR watching this device.
       // FIXME: If the host goes away set an alarm state
-      mqtt_ping_delay -= tlaps;      
+      mqtt_ping_delay -= tlaps;
       if (mqtt_ping_delay<=0) {
-        Serial.println("!DBG:AD2EMB,MQTT publish AD2LRR:AD2ESP32_PING");
-        if (!mqttClient.publish(SECRET_MQTT_ROOT_TOPIC "AD2LRR", "!INF:AD2ESP32_PING")) {
+        Serial.println("!DBG:AD2EMB,MQTT publish AD2EMB-PING:PING");
+        if (!mqttClient.publish(MQTT_ROOT MQTT_PING_PUB_TOPIC, "!INF:PING SOME_ID")) {
           Serial.printf("!DBG:AD2EMB,MQTT publish PING fail rc(%i)\n", mqttClient.state());
         }
         mqtt_ping_delay = MQTT_CONNECT_PING_INTERVAL;

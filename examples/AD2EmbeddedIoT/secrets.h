@@ -34,6 +34,7 @@ int AD2_SOCKPORT = 10000;
  * MQTT Client SECRETS/SETTINGS
  *  select an MQTT server profile.
  */
+
 // PASS: mosquitto.org clear text
 #define MQTT_SERVER_CLEARTEXT_TEST_MOSQUITTO_ORG
 
@@ -57,7 +58,7 @@ int AD2_SOCKPORT = 10000;
  */
 // MQTT mosquitto.org CLEAR TEXT profile
 #if defined(MQTT_SERVER_CLEARTEXT_TEST_MOSQUITTO_ORG)
-#define SECRET_MQTT_ROOT_TOPIC    ""
+#define SECRET_MQTT_ROOT          ""
 #define SECRET_MQTT_SERVER        "test.mosquitto.org"
 #define SECRET_MQTT_PORT          1883
 #define SECRET_MQTT_USER          NULL
@@ -65,7 +66,7 @@ int AD2_SOCKPORT = 10000;
 
 // MQTT SSL test.mosquitto.org profile
 #elif defined(MQTT_SERVER_SSL_TEST_MOSQUITO_ORG)
-#define SECRET_MQTT_ROOT_TOPIC    ""
+#define SECRET_MQTT_ROOT          ""
 #define SECRET_MQTT_SERVER        "test.mosquitto.org"
 #define SECRET_MQTT_PORT          8883
 #define SECRET_MQTT_USER          NULL
@@ -94,7 +95,7 @@ int AD2_SOCKPORT = 10000;
 // MQTT cloudmqtt.com SSL+AUTH profile
 // openssl s_client -showcerts -connect  postman.cloudmqtt.com:20445
 #elif defined(MQTT_SERVER_SSLAUTH_POSTMAN_CLOUDMQTT_COM)
-#define SECRET_MQTT_ROOT_TOPIC    ""
+#define SECRET_MQTT_ROOT          ""
 #define SECRET_MQTT_SERVER        "postman.cloudmqtt.com"
 #define SECRET_MQTT_PORT          20445
 #define SECRET_MQTT_USER          ""
@@ -134,7 +135,7 @@ int AD2_SOCKPORT = 10000;
 
 // MQTT mqtt.dioty.co CLEAR TEXT AUTH profile
 #elif defined(MQTT_SERVER_CLEARTEXTAUTH_MQTT_DIOTY_CO)
-#define SECRET_MQTT_ROOT_TOPIC    "/foo@example.com/"
+#define SECRET_MQTT_ROOT          "/foo@example.com/"
 #define SECRET_MQTT_SERVER        "mqtt.dioty.co"
 #define SECRET_MQTT_PORT          1883
 #define SECRET_MQTT_USER          "foo@example.com"
@@ -142,7 +143,7 @@ int AD2_SOCKPORT = 10000;
 
 // MQTT mqtt.dioty.co SSL AUTH profile
 #elif defined(MQTT_SERVER_SSLAUTH_MQTT_DIOTY_CO)
-#define SECRET_MQTT_ROOT_TOPIC    "/foo@example.com/"
+#define SECRET_MQTT_ROOT          "/foo@example.com/"
 #define SECRET_MQTT_SERVER        "mqtt.dioty.co"
 #define SECRET_MQTT_PORT          8883
 #define SECRET_MQTT_USER          "foo@example.com"
@@ -198,7 +199,7 @@ int AD2_SOCKPORT = 10000;
 
 // MQTT fluux.io SSL profile
 #elif defined(MQTT_SERVER_SSL_MQTT_FLUUX_IO)
-#define SECRET_MQTT_ROOT_TOPIC    ""
+#define SECRET_MQTT_ROOT          ""
 #define SECRET_MQTT_SERVER        "mqtt.fluux.io"
 #define SECRET_MQTT_PORT          8883
 #define SECRET_MQTT_USER          NULL
