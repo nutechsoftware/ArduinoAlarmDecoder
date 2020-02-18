@@ -137,19 +137,19 @@ WiFiClient mqttnetClient;
 #endif
 PubSubClient mqttClient(mqttnetClient);
 String mqtt_clientId;
-#define MQTT_ROOT SECRET_MQTT_ROOT MQTT_AD2EMB_PATH SECRET_MQTT_CLIENT_ID "/"
+String mqtt_root;
 #endif // EN_MQTT_CLIENT
 
 // SSDP service
 #if defined(EN_SSDP)
 typedef struct {
   unsigned long expire_time;
-  std::string *host;
-  std::string *callback;
-  std::string *uuid;
+  String *host;
+  String *callback;
+  String *uuid;
 } ssdp_subscriber_item_t;
 ssdp_subscriber_item_t *ssdp_subscribers[SSDP_MAX_SUBSCRIBERS] = {};
-std::map<std::string, uint32_t> TIME_MULTIPLIER = {{"SECONDS", 1 * 1000},{"MINUTES", 60 * 1000},{"HOURS", 3600 * 1000},{"DAYS", 86400 * 1000}};
+std::map<String, uint32_t> TIME_MULTIPLIER = {{"SECONDS", 1 * 1000},{"MINUTES", 60 * 1000},{"HOURS", 3600 * 1000},{"DAYS", 86400 * 1000}};
 #endif
 
 #if defined(EN_HTTP) || defined(EN_HTTPS)
@@ -183,18 +183,20 @@ void handleEventUNSUBSCRIBE(HTTPRequest * req, HTTPResponse * res);
 #endif
 
 /**
- * generate uuid
+ * generate AD2* uuid
  */
-std::string *genUUID(uint16_t n) {
+void genUUID(uint32_t n, String &ret) {
   uint32_t chipId = ((uint16_t) (ESP.getEfuseMac() >> 32));
   char _uuid[37];
-  snprintf(_uuid, sizeof(_uuid), SECRET_SSDP_UUID_PREFIX "-%02x%02x%02x00%02x%02x",
+  snprintf(_uuid, sizeof(_uuid), SECRET_SSDP_UUID_FORMAT,
   (uint16_t) ((chipId >> 16) & 0xff),
   (uint16_t) ((chipId >>  8) & 0xff),
   (uint16_t) ((chipId      ) & 0xff),
+  (uint16_t) ((n      >> 24) & 0xff),
+  (uint16_t) ((n      >> 16) & 0xff),
   (uint16_t) ((n      >>  8) & 0xff),
   (uint16_t) ((n           ) & 0xff));
-    return new std::string(_uuid);
+  ret = _uuid;
 }
 
 /**
@@ -586,10 +588,35 @@ Serial.println("!DBG:AD2EMB,Network reset close all connections");
  */
 
 /**
+ * generate client id
+ */
+void mqttMakeClientID(uint32_t n, String &ret) {
+  uint32_t chipId = ((uint16_t) (ESP.getEfuseMac() >> 32));
+  char _clid[24];
+  snprintf(_clid, sizeof(_clid), SECRET_MQTT_CLIENTID_FORMAT,
+  (uint16_t) ((chipId >> 16) & 0xff),
+  (uint16_t) ((chipId >>  8) & 0xff),
+  (uint16_t) ((chipId      ) & 0xff),
+  (uint16_t) ((n      >> 24) & 0xff),
+  (uint16_t) ((n      >> 16) & 0xff),
+  (uint16_t) ((n      >>  8) & 0xff),
+  (uint16_t) ((n           ) & 0xff));
+  ret = _clid;
+}
+
+/**
  * MQTT setup
  */
 void mqttSetup() {
-  mqtt_clientId = SECRET_MQTT_CLIENT_ID;
+  // generate unique mqtt client id
+  mqttMakeClientID(0, mqtt_clientId);
+
+  // build root path
+  mqtt_root = SECRET_MQTT_ROOT;
+  mqtt_root += MQTT_AD2EMB_PATH;
+  mqtt_root += mqtt_clientId;
+  mqtt_root += "/";
+
   mqttClient.setServer(SECRET_MQTT_SERVER, SECRET_MQTT_PORT);
   mqttClient.setCallback(mqttCallback);
 #if defined(SECRET_MQTT_SERVER_CERT)
@@ -620,7 +647,8 @@ bool mqttConnect() {
     if (mqttClient.connect(mqtt_clientId.c_str(), SECRET_MQTT_USER, SECRET_MQTT_PASS)) {
       Serial.println("connected");
       // Subscribe to command input topic
-      if (!mqttClient.subscribe(MQTT_ROOT MQTT_CMD_SUB_TOPIC)) {
+      String subtopic = mqtt_root + MQTT_CMD_SUB_TOPIC;
+      if (!mqttClient.subscribe(subtopic.c_str())) {
         Serial.printf("!DBG:AD2EMB,MQTT subscribe to CMD topic failed rc(%i)\n", mqttClient.state());
       }
     } else {
@@ -669,7 +697,8 @@ void mqttLoop(uint32_t tlaps) {
     } else {
       if (!mqtt_signon_sent) {
         Serial.println("!DBG:AD2EMB,MQTT publish AD2LRR:TEST");
-        if (!mqttClient.publish(MQTT_ROOT MQTT_LRR_PUB_TOPIC, "!LRR:008,1,CID_3998,ff")) {
+        String pubtopic = mqtt_root + MQTT_LRR_PUB_TOPIC;
+        if (!mqttClient.publish(pubtopic.c_str(), "!LRR:008,1,CID_3998,ff")) {
           Serial.printf("!DBG:AD2EMB,MQTT publish TEST fail rc(%i)\n", mqttClient.state());
         }
         mqtt_signon_sent = 1;
@@ -680,7 +709,8 @@ void mqttLoop(uint32_t tlaps) {
       mqtt_ping_delay -= tlaps;
       if (mqtt_ping_delay<=0) {
         Serial.println("!DBG:AD2EMB,MQTT publish AD2EMB-PING:PING");
-        if (!mqttClient.publish(MQTT_ROOT MQTT_PING_PUB_TOPIC, SECRET_MQTT_CLIENT_ID)) {
+        String pubtopic = mqtt_root + MQTT_PING_PUB_TOPIC;
+        if (!mqttClient.publish(pubtopic.c_str(), mqtt_clientId.c_str())) {
           Serial.printf("!DBG:AD2EMB,MQTT publish PING fail rc(%i)\n", mqttClient.state());
         }
         mqtt_ping_delay = MQTT_CONNECT_PING_INTERVAL;
@@ -751,16 +781,16 @@ int8_t addSubscriber(HTTPRequest *req, int8_t *idx) {
   int8_t ret = 0;
 
   // get key subscribe headers for searching
-  std::string _host = req->getHeader("HOST");
-  std::string _callback = req->getHeader("CALLBACK");
-  std::string _timeout = req->getHeader("TIMEOUT");
+  String _host = req->getHeader("HOST").c_str();
+  String _callback = req->getHeader("CALLBACK").c_str();
+  String _timeout = req->getHeader("TIMEOUT").c_str();
 
   // check for host + callback match
   bool found = false; int16_t loc = -1;
   for (int n = 0; n < SSDP_MAX_SUBSCRIBERS; n++) {
     if (ssdp_subscribers[n]) {
-      if (_host.compare(*ssdp_subscribers[n]->host) == 0 &&
-          _callback.compare(*ssdp_subscribers[n]->callback) == 0)
+      if (_host.equals(*ssdp_subscribers[n]->host) &&
+          _callback.equals(*ssdp_subscribers[n]->callback))
       {
         found = true;
         loc = n;
@@ -774,7 +804,7 @@ int8_t addSubscriber(HTTPRequest *req, int8_t *idx) {
   }
 
   // build the exire time value
-  std::string tkey;
+  String tkey;
   uint32_t tval = 0;
   if (_timeout.length()) {
     char *tmult = strtok((char*)_timeout.c_str(), "-");
@@ -792,9 +822,10 @@ int8_t addSubscriber(HTTPRequest *req, int8_t *idx) {
     // free slot found for new entry
     if (loc > -1 && *idx > -1) {
       ssdp_subscribers[loc] = new ssdp_subscriber_item_t;
-      ssdp_subscribers[loc]->host = new std::string(_host);
-      ssdp_subscribers[loc]->callback = new std::string(_callback);
-      ssdp_subscribers[loc]->uuid = genUUID(loc+1);
+      ssdp_subscribers[loc]->host = new String(_host);
+      ssdp_subscribers[loc]->callback = new String(_callback);
+      ssdp_subscribers[loc]->uuid = new String;
+      genUUID(loc+1, *ssdp_subscribers[loc]->uuid);
       ssdp_subscribers[loc]->expire_time = millis() + (TIME_MULTIPLIER[tkey] * tval);
       *idx = loc;
     } else {
@@ -825,7 +856,7 @@ int8_t addSubscriber(HTTPRequest *req, int8_t *idx) {
  * Free contents of subscriber
  */
 void freeSubscriberLOC(uint8_t loc) {
-  Serial.printf("!DBG:AD2EMB,SSDP freeSubscriberLOC loc(%i)\n", loc);
+  Serial.printf("!DBG:AD2EMB,SSDP freeSubscriberLOC loc(%i) uuid(%s)\n", loc, ssdp_subscribers[loc]->uuid->c_str());
   if (ssdp_subscribers[loc]->host)
     delete ssdp_subscribers[loc]->host;
   if (ssdp_subscribers[loc]->callback)
@@ -869,7 +900,7 @@ void handleEventSUBSCRIBE(HTTPRequest *req, HTTPResponse *res) {
   int8_t rc = -1, idx = 0;
   if ((rc = addSubscriber(req, &idx)) > -1) {
     // Success
-    Serial.printf("!DBG:AD2EMB,SSDP addSubscribe pass rc(%i) idx(%i)\n", rc, idx);
+    Serial.printf("!DBG:AD2EMB,SSDP addSubscribe pass rc(%i) idx(%i) uuid(%s)\n", rc, idx, ssdp_subscribers[idx]->uuid->c_str());
   } else {
     // Printf error
     Serial.printf("!DBG:AD2EMB,SSDP addSubscribe fail rc(%i) idx(%i)\n", rc, idx);

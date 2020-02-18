@@ -33,17 +33,24 @@ int AD2_SOCKPORT = 10000;
 /**
  * SSDP SECRETS/SETTINGS
  */
-#define SECRET_SSDP_UUID_PREFIX    "416c6172-6d64-6563-6f64"
+// UUID
+// Length fixed 36 characters
+// format args
+// 1-3: esp32 chip id
+// 4-7: unique 32 bit value
+#define SECRET_SSDP_UUID_FORMAT    "41443245-4d42-4544-44%02x-%02x%02x%02x%02x%02x%02x"
 
 /**
  * MQTT Client SECRETS/SETTINGS
  *  select an MQTT server profile.
  */
 
-// Unique ID for this AD2EMB device (FIXME USE NVRAM for this setting)
-// must be unique and complex to avoid collisions on the network
-// current max is 23 bytes.
-#define SECRET_MQTT_CLIENT_ID "a952d8f4-5077-11ea-8d77"
+// Client ID
+// Length fixed 23 characters
+// format args
+// 1-3: esp32 chip id
+// 4-7: unique 32 bit value
+#define SECRET_MQTT_CLIENTID_FORMAT "414432%02x-%02x%02x-%02x%02x-%02x%02x"
 
 // PASS: mosquitto.org clear text
 #define MQTT_SERVER_CLEARTEXT_TEST_MOSQUITTO_ORG
