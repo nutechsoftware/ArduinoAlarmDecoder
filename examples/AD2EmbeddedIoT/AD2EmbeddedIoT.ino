@@ -142,6 +142,14 @@ String mqtt_clientId;
 
 // SSDP service
 #if defined(EN_SSDP)
+typedef struct {
+  unsigned long expire_time;
+  std::string *host;
+  std::string *callback;
+  std::string *uuid;
+} ssdp_subscriber_item_t;
+ssdp_subscriber_item_t *ssdp_subscribers[SSDP_MAX_SUBSCRIBERS] = {};
+std::map<std::string, uint32_t> TIME_MULTIPLIER = {{"SECONDS", 1 * 1000},{"MINUTES", 60 * 1000},{"HOURS", 3600 * 1000},{"DAYS", 86400 * 1000}};
 #endif
 
 #if defined(EN_HTTP) || defined(EN_HTTPS)
@@ -173,6 +181,21 @@ void handleServiceDescription(HTTPRequest * req, HTTPResponse * res);
 void handleEventSUBSCRIBE(HTTPRequest * req, HTTPResponse * res);
 void handleEventUNSUBSCRIBE(HTTPRequest * req, HTTPResponse * res);
 #endif
+
+/**
+ * generate uuid
+ */
+std::string *genUUID(uint16_t n) {
+  uint32_t chipId = ((uint16_t) (ESP.getEfuseMac() >> 32));
+  char _uuid[37];
+  snprintf(_uuid, sizeof(_uuid), SECRET_SSDP_UUID_PREFIX "-%02x%02x%02x00%02x%02x",
+  (uint16_t) ((chipId >> 16) & 0xff),
+  (uint16_t) ((chipId >>  8) & 0xff),
+  (uint16_t) ((chipId      ) & 0xff),
+  (uint16_t) ((n      >>  8) & 0xff),
+  (uint16_t) ((n           ) & 0xff));
+    return new std::string(_uuid);
+}
 
 /**
  * Arduino Sketch setup()
@@ -318,7 +341,9 @@ void networkLoop() {
 
   // calculate time since the end of the last loop.
   uint32_t tlaps = (millis() - time_now);
-
+  if (tlaps > 1000) {
+     Serial.printf("!DBG:AD2EMB,TLAPS EXCEPTION A: %i\n",tlaps);
+  }
 
 #if defined(EN_WIFI)
   static int32_t wifi_reconnect_delay = 0;
@@ -354,7 +379,14 @@ void networkLoop() {
       SSDP.begin();
       ssdp_started = true;
     } else {
-
+      // remove expired subscriptions
+      for (int n = 0; n < SSDP_MAX_SUBSCRIBERS; n++) {
+        if (ssdp_subscribers[n]) {
+          if (time_now > ssdp_subscribers[n]->expire_time) {
+             freeSubscriberLOC(n);
+          }
+        }
+      }
     }
 #endif
 
@@ -654,19 +686,25 @@ void mqttLoop(uint32_t tlaps) {
         mqtt_ping_delay = MQTT_CONNECT_PING_INTERVAL;
       }
     }
+    if (mqtt_ping_delay > MQTT_CONNECT_PING_INTERVAL || mqtt_ping_delay < 0) {
+      Serial.printf("!DBG:AD2EMB,TLAPS EXCEPTION B: %i\n",mqtt_ping_delay);
+    }
 }
 #endif
 
 #if defined(EN_HTTP) || defined(EN_HTTPS)
 // The hanlder functions are the same as in the Static-Page example.
 // The only difference is the check for isSecure in the root handler
-void handleRoot(HTTPRequest * req, HTTPResponse * res) {
+void handleRoot(HTTPRequest *req, HTTPResponse *res) {
   res->setHeader("Content-Type", "text/html");
   // Send content
   res->printf(_alarmdecoder_root_html,(int)(millis()/1000),req->isSecure() ? "HTTPS" : "HTTP");
 }
 
-void handle404(HTTPRequest * req, HTTPResponse * res) {
+/**
+ * HTTP 404 not found error resopnse
+ */
+void handle404(HTTPRequest *req, HTTPResponse *res) {
   req->discardRequestBody();
   res->setStatusCode(404);
   res->setStatusText("Not Found");
@@ -675,14 +713,20 @@ void handle404(HTTPRequest * req, HTTPResponse * res) {
   res->print(_alarmdecoder_404_html);
 }
 
-void handleFavicon(HTTPRequest * req, HTTPResponse * res) {
+/**
+ * HTTP response for favicon icon file
+ */
+void handleFavicon(HTTPRequest *req, HTTPResponse *res) {
   // Set Content-Type
   res->setHeader("Content-Type", "image/vnd.microsoft.icon");
   // Send content
   res->write(favicon_ico, favicon_ico_len);
 }
 
-void handleAD2icon(HTTPRequest * req, HTTPResponse * res) {
+/**
+ * HTTP resposne for AD2 Icon
+ */
+void handleAD2icon(HTTPRequest *req, HTTPResponse *res) {
   // Set Content-Type
   res->setHeader("Content-Type", "image/png");
   // Send content
@@ -691,7 +735,111 @@ void handleAD2icon(HTTPRequest * req, HTTPResponse * res) {
 
 
 #if defined(EN_SSDP)
-void handleDeviceDescription(HTTPRequest * req, HTTPResponse * res) {
+/**
+ * Attempt to locate a free subscriber slot and fill it with subscriber info.
+ * Set idx to < 0 to remove subscriber.
+ *
+ * return
+ *     1: success updated entry
+ *     0: success new entry
+ *    -1: fail general
+ *    -2: fail malloc fail
+ *    -3: fail no slots
+ *    -4: delete not found
+ */
+int8_t addSubscriber(HTTPRequest *req, int8_t *idx) {
+  int8_t ret = 0;
+
+  // get key subscribe headers for searching
+  std::string _host = req->getHeader("HOST");
+  std::string _callback = req->getHeader("CALLBACK");
+  std::string _timeout = req->getHeader("TIMEOUT");
+
+  // check for host + callback match
+  bool found = false; int16_t loc = -1;
+  for (int n = 0; n < SSDP_MAX_SUBSCRIBERS; n++) {
+    if (ssdp_subscribers[n]) {
+      if (_host.compare(*ssdp_subscribers[n]->host) == 0 &&
+          _callback.compare(*ssdp_subscribers[n]->callback) == 0)
+      {
+        found = true;
+        loc = n;
+        break;
+      }
+    } else {
+      // save first empty location
+      if (loc == -1)
+        loc = n;
+    }
+  }
+
+  // build the exire time value
+  std::string tkey;
+  uint32_t tval = 0;
+  if (_timeout.length()) {
+    char *tmult = strtok((char*)_timeout.c_str(), "-");
+    if (tmult) {
+      char *szval = strtok(NULL, "");
+      if (szval) {
+        tval = atoi(szval);
+        tkey = strupr(tmult);
+      }
+    }
+  }
+
+  // match not found
+  if (!found) {
+    // free slot found for new entry
+    if (loc > -1 && *idx > -1) {
+      ssdp_subscribers[loc] = new ssdp_subscriber_item_t;
+      ssdp_subscribers[loc]->host = new std::string(_host);
+      ssdp_subscribers[loc]->callback = new std::string(_callback);
+      ssdp_subscribers[loc]->uuid = genUUID(loc+1);
+      ssdp_subscribers[loc]->expire_time = millis() + (TIME_MULTIPLIER[tkey] * tval);
+      *idx = loc;
+    } else {
+      if (*idx > -1) {
+        // delete not found
+        ret = -4;
+      } else {
+        // no free slot
+        ret = -3;
+      }
+    }
+  } else {
+    if (*idx < 0) {
+      // found existing delete requested.
+      *idx = loc;
+      freeSubscriberLOC(loc);
+    } else {
+      // found existing set new exire time.
+      ssdp_subscribers[loc]->expire_time = millis() + (TIME_MULTIPLIER[tkey] * tval);
+      ret = 1;
+    }
+    *idx = loc;
+  }
+  return ret;
+}
+
+/**
+ * Free contents of subscriber
+ */
+void freeSubscriberLOC(uint8_t loc) {
+  Serial.printf("!DBG:AD2EMB,SSDP freeSubscriberLOC loc(%i)\n", loc);
+  if (ssdp_subscribers[loc]->host)
+    delete ssdp_subscribers[loc]->host;
+  if (ssdp_subscribers[loc]->callback)
+    delete ssdp_subscribers[loc]->callback;
+  if (ssdp_subscribers[loc]->uuid)
+    delete ssdp_subscribers[loc]->uuid;
+  delete ssdp_subscribers[loc];
+  ssdp_subscribers[loc] = 0;
+}
+
+/**
+ * HTTP response for device description xml file
+ */
+void handleDeviceDescription(HTTPRequest *req, HTTPResponse *res) {
   // Set Content-Type
   res->setHeader("Content-Type", "text/xml");
   // Send schema
@@ -701,23 +849,49 @@ void handleDeviceDescription(HTTPRequest * req, HTTPResponse * res) {
   res->print(_alarmdecoder_device_schema_xml);
 }
 
-void handleServiceDescription(HTTPRequest * req, HTTPResponse * res) {
+/**
+ * HTTP response for service description xml file
+ */
+void handleServiceDescription(HTTPRequest *req, HTTPResponse *res) {
   // Set Content-Type
   res->setHeader("Content-Type", "text/xml");
   // Write data from header file
   res->printf(_alarmdecoder_service_schema_xml);
 }
 
-void handleEventSUBSCRIBE(HTTPRequest * req, HTTPResponse * res) {
+/**
+ * HTTP response for service subscribe request
+ */
+void handleEventSUBSCRIBE(HTTPRequest *req, HTTPResponse *res) {
   // Set Content-Type
   res->setHeader("Content-Type", "text/xml");
-  // Write data from header file
-  res->printf(_alarmdecoder_service_schema_xml);
+
+  int8_t rc = -1, idx = 0;
+  if ((rc = addSubscriber(req, &idx)) > -1) {
+    // Success
+    Serial.printf("!DBG:AD2EMB,SSDP addSubscribe pass rc(%i) idx(%i)\n", rc, idx);
+  } else {
+    // Printf error
+    Serial.printf("!DBG:AD2EMB,SSDP addSubscribe fail rc(%i) idx(%i)\n", rc, idx);
+  }
 }
 
-void handleEventUNSUBSCRIBE(HTTPRequest * req, HTTPResponse * res) {
+/**
+ * HTTP response for service unsubscribe request
+ */
+void handleEventUNSUBSCRIBE(HTTPRequest *req, HTTPResponse *res) {
   // Set Content-Type
   res->setHeader("Content-Type", "text/xml");
+
+  int8_t rc = -1, idx = -1; // idx = -1 to remove if found
+  if ((rc = addSubscriber(req, &idx)) > -1) {
+    // Success
+    Serial.printf("!DBG:AD2EMB,SSDP addSubscribe delete pass rc(%i)\n", rc);
+  } else {
+    // Printf error
+    Serial.printf("!DBG:AD2EMB,SSDP addSubscribe delete fail rc(%i)\n", rc);
+  }
+
   // Write data from header file
   res->printf(_alarmdecoder_service_schema_xml);
 }

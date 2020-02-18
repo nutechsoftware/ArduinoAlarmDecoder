@@ -31,6 +31,11 @@ int AD2_SOCKPORT = 10000;
 #define SECRET_WIFI_PASS          ""
 
 /**
+ * SSDP SECRETS/SETTINGS
+ */
+#define SECRET_SSDP_UUID_PREFIX    "416c6172-6d64-6563-6f64"
+
+/**
  * MQTT Client SECRETS/SETTINGS
  *  select an MQTT server profile.
  */

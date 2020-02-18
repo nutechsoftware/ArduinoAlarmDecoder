@@ -127,6 +127,8 @@ static const char _alarmdecoder_404_html[] PROGMEM =
  * SSDP setings
  */
 #if defined(EN_SSDP)
+#define SSDP_MAX_SUBSCRIBERS 5
+
 static const char _alarmdecoder_device_schema_xml[] PROGMEM =
 "<?xml version=\"1.0\"?>"
 "<root xmlns=\"urn:schemas-upnp-org:device-1-0\">"
