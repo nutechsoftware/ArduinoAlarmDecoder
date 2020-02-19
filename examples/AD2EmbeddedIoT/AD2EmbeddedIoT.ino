@@ -115,7 +115,8 @@ static bool wifi_ready = false;
 #endif
 
 // time/delay tracking
-static uint32_t time_now = 0;
+static unsigned long time_now = 0;
+static unsigned long time_laps = 0;
 
 // raw mode allows direct access to the AD2* device and disables internal processing.
 static bool raw_mode = false;
@@ -317,6 +318,14 @@ ResourceNode * nodeEventUNSUBSCRIBE = new ResourceNode("/alarmdecoder/event", "U
  */
 void loop()
 {
+  // calculate time since the end of the last loop.
+  time_laps = (micros() - time_now);
+  // update current time
+  time_now = micros();
+  // delay exception tracking
+  if (time_laps > 100000) {
+     Serial.printf("!DBG:AD2EMB,TLAPS EXCEPTION A: %lu\n", time_laps);
+  }
 
   // AD2* message processing
   ad2Loop();
@@ -324,12 +333,8 @@ void loop()
   // Networking ETH/WiFi persistent connection state machine cycles
   networkLoop();
 
-  // update current time
-  time_now = millis();
-
-  // small loop delay needed for time tracking
-  delay(1);
-
+  // small loop delay needed for time tracking > 1ms
+  delayMicroseconds(10);
 }
 
 /**
@@ -341,19 +346,13 @@ void loop()
  */
 void networkLoop() {
 
-  // calculate time since the end of the last loop.
-  uint32_t tlaps = (millis() - time_now);
-  if (tlaps > 1000) {
-     Serial.printf("!DBG:AD2EMB,TLAPS EXCEPTION A: %i\n",tlaps);
-  }
-
 #if defined(EN_WIFI)
-  static int32_t wifi_reconnect_delay = 0;
+  static long wifi_reconnect_delay = 0;
   if (wifi_ready && !wifi_connected) {
     if (!wifi_reconnect_delay) {
       wifi_reconnect_delay = WIFI_CONNECT_RETRY_INTERVAL;
     } else {
-      wifi_reconnect_delay -= tlaps;
+      wifi_reconnect_delay -= time_laps;
       if (wifi_reconnect_delay<=0){
         wifi_reconnect_delay = 0;
         Serial.println("!DBG:AD2EMB,STA Connecting");
@@ -367,7 +366,7 @@ void networkLoop() {
   if (eth_connected || wifi_connected) {
 
 #if defined(EN_MQTT_CLIENT)
-    mqttLoop(tlaps);
+    mqttLoop();
 #endif
 
 #if defined(EN_REST_CLIENT)
@@ -384,7 +383,7 @@ void networkLoop() {
       // remove expired subscriptions
       for (int n = 0; n < SSDP_MAX_SUBSCRIBERS; n++) {
         if (ssdp_subscribers[n]) {
-          if (time_now > ssdp_subscribers[n]->expire_time) {
+          if (millis() > ssdp_subscribers[n]->expire_time) {
              freeSubscriberLOC(n);
           }
         }
@@ -665,10 +664,10 @@ bool mqttConnect() {
 /**
  * Process MQTT state
  */
-void mqttLoop(uint32_t tlaps) {
+void mqttLoop() {
     /// delay: counters must be signed to easily detect overflow by going negative
-    static int32_t mqtt_reconnect_delay = 0;
-    static int32_t mqtt_ping_delay = 0;
+    static long mqtt_reconnect_delay = 0;
+    static long mqtt_ping_delay = 0;
   
     /// state: fire off a message on first connect.
     static uint8_t mqtt_signon_sent = 0;
@@ -682,7 +681,7 @@ void mqttLoop(uint32_t tlaps) {
         Serial.printf("!DBG:AD2EMB,MQTT connection closed rc(%i) reconnect delay starting\n", mqttClient.state());
         mqtt_reconnect_delay = MQTT_CONNECT_RETRY_INTERVAL;
       } else {
-        mqtt_reconnect_delay -= tlaps;
+        mqtt_reconnect_delay -= time_laps;
         if (mqtt_reconnect_delay<=0){
           mqtt_reconnect_delay=0;
           if (!mqttConnect()) {
@@ -706,7 +705,7 @@ void mqttLoop(uint32_t tlaps) {
 
       // See if we have a host subscribing to AD2LRR watching this device.
       // FIXME: If the host goes away set an alarm state
-      mqtt_ping_delay -= tlaps;
+      mqtt_ping_delay -= time_laps;
       if (mqtt_ping_delay<=0) {
         Serial.println("!DBG:AD2EMB,MQTT publish AD2EMB-PING:PING");
         String pubtopic = mqtt_root + MQTT_PING_PUB_TOPIC;
@@ -717,7 +716,7 @@ void mqttLoop(uint32_t tlaps) {
       }
     }
     if (mqtt_ping_delay > MQTT_CONNECT_PING_INTERVAL || mqtt_ping_delay < 0) {
-      Serial.printf("!DBG:AD2EMB,TLAPS EXCEPTION B: %i\n",mqtt_ping_delay);
+      Serial.printf("!DBG:AD2EMB,TLAPS EXCEPTION B: %lu\n", mqtt_ping_delay);
     }
 }
 #endif

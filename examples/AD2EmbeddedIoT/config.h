@@ -68,7 +68,7 @@ IPAddress dhcp_fail_gw(169,254,0,1);
  * Base WiFi settings
  */
 #if defined(EN_WIFI)
-#define WIFI_CONNECT_RETRY_INTERVAL 8000   // 8 seconds
+#define WIFI_CONNECT_RETRY_INTERVAL 8 * 1000 * 1000 // (µs) 8 second delay
 #endif
 
 /**
@@ -82,8 +82,8 @@ IPAddress dhcp_fail_gw(169,254,0,1);
  *   mosquitto_sub -u admin -P admin -t 'AD2EMP/+/EVENT/PING'
  */
 #if defined(EN_MQTT_CLIENT)
-#define MQTT_CONNECT_RETRY_INTERVAL 5000    // reconnect attempt every 5 seconds
-#define MQTT_CONNECT_PING_INTERVAL 60000    // Publish PING to subscribers every 60 seconds
+#define MQTT_CONNECT_RETRY_INTERVAL ( 5 * 1000 * 1000) // (µs) reconnect attempt every 5 seconds
+#define MQTT_CONNECT_PING_INTERVAL  (60 * 1000 * 1000) // (µs) Publish PING to subscribers every 60 seconds
 #define MQTT_AD2EMB_PATH BASE_HOST_NAME "/"
 // input topics
 #define MQTT_CMD_SUB_TOPIC  "CONTROL/CMD"   // Subscribe for remote control. Arm/Disarm, Compass, configuration, etc.
