@@ -181,6 +181,10 @@ void handleDeviceDescription(HTTPRequest * req, HTTPResponse * res);
 void handleServiceDescription(HTTPRequest * req, HTTPResponse * res);
 void handleEventSUBSCRIBE(HTTPRequest * req, HTTPResponse * res);
 void handleEventUNSUBSCRIBE(HTTPRequest * req, HTTPResponse * res);
+#ifdef EN_SWAGGER_UI
+void handleSwaggerUI(HTTPRequest * req, HTTPResponse * res);
+void handleSwaggerJSON(HTTPRequest * req, HTTPResponse * res);
+#endif
 #endif
 
 /**
@@ -287,6 +291,10 @@ ResourceNode * nodeDeviceDescription = new ResourceNode("/device_description.xml
 ResourceNode * nodeServiceDescription = new ResourceNode("/AlarmDecoder.xml", "GET", &handleServiceDescription);
 ResourceNode * nodeEventSUBSCRIBE = new ResourceNode("/alarmdecoder/event", "SUBSCRIBE", &handleEventSUBSCRIBE);
 ResourceNode * nodeEventUNSUBSCRIBE = new ResourceNode("/alarmdecoder/event", "UNSUBSCRIBE", &handleEventUNSUBSCRIBE);
+#if defined(EN_SWAGGER_UI)
+ResourceNode * nodeSwaggerUI = new ResourceNode("/swaggerUI", "GET", &handleSwaggerUI);
+ResourceNode * nodeSwaggerJSON = new ResourceNode("/alarmdecoder.json", "GET", &handleSwaggerJSON);
+#endif
 #if defined(EN_HTTP)
   insecureServer.registerNode(nodeRoot);
   insecureServer.registerNode(nodeFavicon);
@@ -296,6 +304,10 @@ ResourceNode * nodeEventUNSUBSCRIBE = new ResourceNode("/alarmdecoder/event", "U
   insecureServer.registerNode(nodeEventSUBSCRIBE);
   insecureServer.registerNode(nodeEventUNSUBSCRIBE);
   insecureServer.setDefaultNode(node404);
+#if defined(EN_SWAGGER_UI)
+  insecureServer.registerNode(nodeSwaggerUI);
+  insecureServer.registerNode(nodeSwaggerJSON);
+#endif
 #endif
 #if defined(EN_HTTPS)
   secureServer.registerNode(nodeRoot);
@@ -304,6 +316,10 @@ ResourceNode * nodeEventUNSUBSCRIBE = new ResourceNode("/alarmdecoder/event", "U
   secureServer.registerNode(nodeDeviceDescription);
   secureServer.registerNode(nodeServiceDescription);
   secureServer.setDefaultNode(node404);
+#if defined(EN_SWAGGER_UI)
+  secureServer.registerNode(nodeSwaggerUI);
+  secureServer.registerNode(nodeSwaggerJSON);
+#endif
 #endif
 #endif
 
@@ -762,6 +778,24 @@ void handleAD2icon(HTTPRequest *req, HTTPResponse *res) {
   res->write(ad2icon_png, ad2icon_png_len);
 }
 
+#if defined(EN_SWAGGER_UI)
+/**
+ * HTTP response for SwaggerUI html file
+ */
+void handleSwaggerUI(HTTPRequest *req, HTTPResponse *res) {
+  // Set Content-Type
+  res->setHeader("Content-Type", "text/html");
+  res->print(_swagger_ui_html);
+}
+/**
+ * HTTP response for Swagger json file
+ */
+void handleSwaggerJSON(HTTPRequest *req, HTTPResponse *res) {
+  // Set Content-Type
+  res->setHeader("Content-Type", "text/json");
+  res->print(_alarmdecoder_swagger_json);
+}
+#endif
 
 #if defined(EN_SSDP)
 /**

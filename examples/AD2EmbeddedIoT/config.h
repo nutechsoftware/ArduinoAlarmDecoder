@@ -3,7 +3,7 @@
 
 /**
  *  Enable Base features/service
- *  
+ *
  *  It may not be possible to enable all at the same time.
  *  This will depend on the hardware code and ram space.
  */
@@ -14,6 +14,7 @@
 //#define EN_HTTP
 //#define EN_HTTPS
 //#define EN_REST
+#define EN_SWAGGER_UI
 
 
 /**
@@ -130,97 +131,311 @@ static const char _alarmdecoder_404_html[] PROGMEM =
 #define SSDP_MAX_SUBSCRIBERS 5
 
 static const char _alarmdecoder_device_schema_xml[] PROGMEM =
-"<?xml version=\"1.0\"?>"
-"<root xmlns=\"urn:schemas-upnp-org:device-1-0\">"
-  "<specVersion>"
-    "<major>1</major>"
-    "<minor>0</minor>"
-  "</specVersion>"
-  "<device>"
-    "<deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>"
-    "<friendlyName>AlarmDecoder Embedded IoT</friendlyName>"
-    "<presentationURL>/</presentationURL>"
-    "<serialNumber>00000000</serialNumber>"
-    "<modelName>AD2ESP32</modelName>"
-    "<modelNumber>2.0</modelNumber>"
-    "<modelURL>https://github.com/nutechsoftware/alarmdecoder-embedded</modelURL>"
-    "<manufacturer>Nu Tech Software, Solutions, Inc.</manufacturer>"
-    "<manufacturerURL>http://www.AlarmDecoder.com/</manufacturerURL>"
-    "<UDN>uuid:38323636-4558-4dda-9188-cda0e60014e4</UDN>"
-    "<iconList>"
-      "<icon>"
-       "<mimetype>image/png</mimetype>"
-       "<height>32</height>"
-       "<width>32</width>"
-       "<depth>24</depth>"
-       "<url>ad2icon.png</url>"
-      "</icon>"
-    "</iconList>"
-    "<serviceList>"
-      "<service>"
-        "<serviceType>urn:schemas-upnp-org:service:AlarmDecoder:1</serviceType>"
-        "<serviceId>urn:upnp-org:serviceId:AlarmDecoder:1</serviceId>"
-        "<SCPDURL>AlarmDecoder.xml</SCPDURL>"
-        "<eventSubURL>/api/v1/alarmdecoder/event</eventSubURL>"
-        "<controlURL>/api/v1/alarmdecoder</controlURL>"
-      "</service>"
-    "</serviceList>"
-  "</device>"
-"</root>\r\n"
-"\r\n";
+R"device_schema_xml(
+<?xml version="1.0" encoding="UTF-8"?>
+<root xmlns="urn:schemas-upnp-org:device-1-0">
+   <specVersion>
+      <major>1</major>
+      <minor>0</minor>
+   </specVersion>
+   <device>
+      <deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>
+      <friendlyName>AlarmDecoder Embedded IoT</friendlyName>
+      <presentationURL>/</presentationURL>
+      <modelName>AD2ESP32</modelName>
+      <modelNumber>2.0</modelNumber>
+      <modelURL>https://github.com/nutechsoftware/ArduinoAlarmDecoder</modelURL>
+      <manufacturer>Nu Tech Software, Solutions, Inc.</manufacturer>
+      <manufacturerURL>http://www.AlarmDecoder.com/</manufacturerURL>
+      <UDN>uuid:%s</UDN>
+      <serialNumber>00000000</serialNumber>
+      <iconList>
+         <icon>
+            <mimetype>image/png</mimetype>
+            <height>32</height>
+            <width>32</width>
+            <depth>24</depth>
+            <url>ad2icon.png</url>
+         </icon>
+      </iconList>
+      <serviceList>
+         <service>
+            <serviceType>urn:schemas-upnp-org:service:AlarmDecoder:1</serviceType>
+            <serviceId>urn:upnp-org:serviceId:AlarmDecoder:1</serviceId>
+            <SCPDURL>AlarmDecoder.xml</SCPDURL>
+            <eventSubURL>/api/v1/alarmdecoder/event</eventSubURL>
+            <controlURL>/api/v1/alarmdecoder</controlURL>
+         </service>
+      </serviceList>
+   </device>
+</root>
+)device_schema_xml";
 
 // FIXME: sample not valid.
 static const char _alarmdecoder_service_schema_xml[] PROGMEM =
-"<?xml version=\"1.0\" encoding=\"utf-8\"?>"
-"<scpd xmlns=\"urn:schemas-upnp-org:service-1-0\">"
-  "<specVersion>"
-    "<major>1</major>"
-    "<minor>0</minor>"
-  "</specVersion>"
-  "<actionList>"
-    "<action>"
-      "<name>SetTarget</name>"
-      "<argumentList>"
-        "<argument>"
-          "<name>newTargetValue</name>"
-          "<relatedStateVariable>Target</relatedStateVariable>"
-          "<direction>in</direction>"
-        "</argument>"
-      "</argumentList>"
-    "</action>"
-    "<action>"
-      "<name>GetTarget</name>"
-      "<argumentList>"
-        "<argument>"
-          "<name>RetTargetValue</name>"
-          "<relatedStateVariable>Target</relatedStateVariable>"
-          "<direction>out</direction>"
-        "</argument>"
-      "</argumentList>"
-    "</action>"
-    "<action>"
-      "<name>GetStatus</name>"
-      "<argumentList>"
-        "<argument>"
-          "<name>ResultStatus</name>"
-          "<relatedStateVariable>Status</relatedStateVariable>"
-          "<direction>out</direction>"
-        "</argument>"
-      "</argumentList>"
-    "</action>"
-  "</actionList>"
-  "<serviceStateTable>"
-    "<stateVariable sendEvents=\"no\">"
-      "<name>Target</name>"
-      "<dataType>boolean</dataType>"
-      "<defaultValue>0</defaultValue>"
-    "</stateVariable>"
-    "<stateVariable sendEvents=\"yes\">"
-      "<name>Status</name>"
-      "<dataType>boolean</dataType>"
-      "<defaultValue>0</defaultValue>"
-    "</stateVariable>"
-  "</serviceStateTable>"
-"</scpd>";
+R"service_schema_xml(
+<?xml version="1.0" encoding="UTF-8"?>
+<scpd xmlns="urn:schemas-upnp-org:service-1-0">
+   <specVersion>
+      <major>1</major>
+      <minor>0</minor>
+   </specVersion>
+   <actionList>
+      <action>
+         <name>SetTarget</name>
+         <argumentList>
+            <argument>
+               <name>newTargetValue</name>
+               <relatedStateVariable>Target</relatedStateVariable>
+               <direction>in</direction>
+            </argument>
+         </argumentList>
+      </action>
+      <action>
+         <name>GetTarget</name>
+         <argumentList>
+            <argument>
+               <name>RetTargetValue</name>
+               <relatedStateVariable>Target</relatedStateVariable>
+               <direction>out</direction>
+            </argument>
+         </argumentList>
+      </action>
+      <action>
+         <name>GetStatus</name>
+         <argumentList>
+            <argument>
+               <name>ResultStatus</name>
+               <relatedStateVariable>Status</relatedStateVariable>
+               <direction>out</direction>
+            </argument>
+         </argumentList>
+      </action>
+   </actionList>
+   <serviceStateTable>
+      <stateVariable sendEvents="no">
+         <name>Target</name>
+         <dataType>boolean</dataType>
+         <defaultValue>0</defaultValue>
+      </stateVariable>
+      <stateVariable sendEvents="yes">
+         <name>Status</name>
+         <dataType>boolean</dataType>
+         <defaultValue>0</defaultValue>
+      </stateVariable>
+   </serviceStateTable>
+</scpd>
+)service_schema_xml";
 #endif // EN_SSDP
+
+#if defined(EN_SWAGGER_UI)
+static const char _swagger_ui_html[] PROGMEM =
+R"swagger_ui(
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="x-ua-compatible" content="IE=edge">
+    <title>Swagger UI</title>
+    <link href='https://cdnjs.cloudflare.com/ajax/libs/meyer-reset/2.0/reset.min.css' media='screen' rel='stylesheet' type='text/css' />
+    <link href='https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/2.2.10/css/screen.css' media='screen' rel='stylesheet' type='text/css' />
+    <script>
+        if (typeof Object.assign != 'function') {
+            (function() {
+                Object.assign = function(target) {
+                    'use strict';
+                    if (target === undefined || target === null) {
+                        throw new TypeError('Cannot convert undefined or null to object');
+                    }
+                    var output = Object(target);
+                    for (var index = 1; index < arguments.length; index++) {
+                        var source = arguments[index];
+                        if (source !== undefined && source !== null) {
+                            for (var nextKey in source) {
+                                if (Object.prototype.hasOwnProperty.call(source, nextKey)) {
+                                    output[nextKey] = source[nextKey];
+                                }
+                            }
+                        }
+                    }
+                    return output;
+                };
+            })();
+        }
+    </script>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/jquery/1.8.0/jquery-1.8.0.min.js' type='text/javascript'></script>
+    <script>
+        (function(b) {
+            b.fn.slideto = function(a) {
+                a = b.extend({
+                    slide_duration: "slow",
+                    highlight_duration: 3E3,
+                    highlight: true,
+                    highlight_color: "#FFFF99"
+                }, a);
+                return this.each(function() {
+                    obj = b(this);
+                    b("body").animate({
+                        scrollTop: obj.offset().top
+                    }, a.slide_duration, function() {
+                        a.highlight && b.ui.version && obj.effect("highlight", {
+                            color: a.highlight_color
+                        }, a.highlight_duration)
+                    })
+                })
+            }
+        })(jQuery);
+    </script>
+    <script>
+        jQuery.fn.wiggle = function(o) {
+            var d = {
+                speed: 50,
+                wiggles: 3,
+                travel: 5,
+                callback: null
+            };
+            var o = jQuery.extend(d, o);
+            return this.each(function() {
+                var cache = this;
+                var wrap = jQuery(this).wrap(' <div class="wiggle-wrap"></div>').css("position", "relative");
+                var calls = 0;
+                for (i = 1; i <= o.wiggles; i++) {
+                    jQuery(this).animate({
+                        left: "-=" + o.travel
+                    }, o.speed).animate({
+                        left: "+=" + o.travel * 2
+                    }, o.speed * 2).animate({
+                        left: "-=" + o.travel
+                    }, o.speed, function() {
+                        calls++;
+                        if (jQuery(cache).parent().hasClass('wiggle-wrap')) {
+                            jQuery(cache).parent().replaceWith(cache);
+                        }
+                        if (calls == o.wiggles && jQuery.isFunction(o.callback)) {
+                            o.callback();
+                        }
+                    });
+                }
+            });
+        };
+    </script>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/jquery.ba-bbq/1.2.1/jquery.ba-bbq.min.js' type='text/javascript'></script>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/handlebars.js/4.0.5/handlebars.min.js' type='text/javascript'></script>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/lodash-compat/3.10.1/lodash.min.js' type='text/javascript'></script>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/backbone.js/1.1.2/backbone-min.js' type='text/javascript'></script>
+    <script>
+        Backbone.View = (function(View) {
+            return View.extend({
+                constructor: function(options) {
+                    this.options = options || {};
+                    View.apply(this, arguments);
+                }
+            });
+        })(Backbone.View);
+    </script>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/2.2.10/swagger-ui.min.js' type='text/javascript'></script>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.10.0/highlight.min.js' type='text/javascript'></script>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.10.0/languages/json.min.js' type='text/javascript'></script>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/json-editor/0.7.28/jsoneditor.min.js' type='text/javascript'></script>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/marked/0.3.6/marked.min.js' type='text/javascript'></script>
+    <script type="text/javascript">
+        $(function() {
+            url = "http://192.168.1.1/alarmdecoder.json";
+            hljs.configure({
+                highlightSizeThreshold: 5000
+            });
+            window.swaggerUi = new SwaggerUi({
+                url: url,
+                dom_id: "swagger-ui-container",
+                supportedSubmitMethods: ['get', 'post', 'put', 'delete', 'patch'],
+                validatorUrl: null,
+                onComplete: function(swaggerApi, swaggerUi) {},
+                onFailure: function(data) {
+                    log("Unable to Load SwaggerUI");
+                },
+                docExpansion: "none",
+                jsonEditor: false,
+                defaultModelRendering: 'schema',
+                showRequestHeaders: false,
+                showOperationIds: false
+            });
+            window.swaggerUi.load();
+
+            function log() {
+                if ('console' in window) {
+                    console.log.apply(console, arguments);
+                }
+            }
+        });
+    </script>
+</head>
+
+<body class="swagger-section">
+    <div id='header'>
+        <div class="swagger-ui-wrap">
+            <a id="logo" href="http://swagger.io"><img class="logo__img" alt="swagger" height="30" width="30" src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/2.2.10/images/logo_small.png" /><span class="logo__title">swagger</span></a>
+            <form id='api_selector'></form>
+        </div>
+    </div>
+    <div id="message-bar" class="swagger-ui-wrap" data-sw-translate>&nbsp;</div>
+    <div id="swagger-ui-container" class="swagger-ui-wrap"></div>
+</body>
+
+</html>
+)swagger_ui";
+
+static const char _alarmdecoder_swagger_json[] PROGMEM =
+R"ad2swaggerjson(
+{
+   "swagger":"2.0",
+   "info":{
+      "description":"This is a sample server Petstore server.",
+      "version":"1.0.0",
+      "title":"IoT application"
+   },
+   "host":"192.168.1.1",
+   "tags":[
+      {
+         "name":"Temperature",
+         "description":"Getting temperature measurements"
+      }
+   ],
+   "paths":{
+      "/temperature":{
+         "get":{
+            "tags":[
+               "Temperature"
+            ],
+            "summary":"Endpoint for getting temperature measurements",
+            "description":"",
+            "operationId":"getTemperature",
+            "responses":{
+               "200":{
+                  "description":"A list of temperature measurements",
+                  "schema":{
+                     "$ref":"#/definitions/temperatureMeasurement"
+                  }
+               }
+            }
+         }
+      }
+   },
+   "definitions":{
+      "temperatureMeasurement":{
+         "type":"object",
+         "properties":{
+            "value":{
+               "type":"string"
+            },
+            "timestamp":{
+               "type":"string"
+            }
+         }
+      }
+   }
+}
+)ad2swaggerjson";
+
+#endif
 #endif // CONFIG_H
