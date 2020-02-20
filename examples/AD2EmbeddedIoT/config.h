@@ -14,7 +14,7 @@
 //#define EN_HTTP
 //#define EN_HTTPS
 //#define EN_REST
-#define EN_SWAGGER_UI
+//#define EN_SWAGGER_UI
 
 
 /**
@@ -102,26 +102,31 @@ IPAddress dhcp_fail_gw(169,254,0,1);
  * HTTP/HTTPS setings
  */
 #if defined(EN_HTTP) || defined(EN_HTTPS)
-static const char _alarmdecoder_root_html[] PROGMEM =
-"<!DOCTYPE html>"
-"<html>"
-"<head>"
-"<title>AD2EmbeddedIoT web services</title>"
-"<link rel=\"Shortcut Icon\" href=\"/favicon.ico\" type=\"image/x-icon\">"
-"</head>"
-"<body>"
-"<h1>AlarmDecoder Embedded IoT web interface coming soon!</h1>"
-"<p>Your server is running for %i seconds.</p>"
-"<p>You are connected via <strong>%s</strong>.</p>"
-"</body>"
-"</html>";
+static PGM_P _alarmdecoder_root_html PROGMEM =
+R"http_root_html(
+<!DOCTYPE html>
+<html>
+<head>
+<title>AD2EmbeddedIoT web services</title>
+<link rel="Shortcut Icon" href="/favicon.ico" type="image/x-icon">
+</head>
+<body>
+<h1>AlarmDecoder Embedded IoT web interface coming soon!</h1>
+<p>Your server is running for ${0} seconds.</p>
+<p>You are connected via <strong>${1}</strong>.</p>
+<p>Connection from <strong>${2}</strong></p>
+</body>
+</html>
+)http_root_html";
 
 static const char _alarmdecoder_404_html[] PROGMEM =
-"<!DOCTYPE html>"
-"<html>"
-"<head><title>Not Found</title></head>"
-"<body><h1>404 Not Found</h1><p>The requested resource was not found on this server.</p></body>"
-"</html>";
+R"http_404_html(
+<!DOCTYPE html>
+<html>
+<head><title>Not Found</title></head>
+<body><h1>404 Not Found</h1><p>The requested resource was not found on this server.</p></body>
+</html>
+)http_404_html";
 #endif
 
 /**
@@ -130,8 +135,8 @@ static const char _alarmdecoder_404_html[] PROGMEM =
 #if defined(EN_SSDP)
 #define SSDP_MAX_SUBSCRIBERS 5
 
-static const char _alarmdecoder_device_schema_xml[] PROGMEM =
-R"device_schema_xml(
+static PGM_P _alarmdecoder_device_schema_xml PROGMEM =
+R"dev_schema_xml(
 <?xml version="1.0" encoding="UTF-8"?>
 <root xmlns="urn:schemas-upnp-org:device-1-0">
    <specVersion>
@@ -169,11 +174,11 @@ R"device_schema_xml(
       </serviceList>
    </device>
 </root>
-)device_schema_xml";
+)dev_schema_xml";
 
 // FIXME: sample not valid.
-static const char _alarmdecoder_service_schema_xml[] PROGMEM =
-R"service_schema_xml(
+static PGM_P _alarmdecoder_service_schema_xml PROGMEM =
+R"service_sch_xml(
 <?xml version="1.0" encoding="UTF-8"?>
 <scpd xmlns="urn:schemas-upnp-org:service-1-0">
    <specVersion>
@@ -225,11 +230,11 @@ R"service_schema_xml(
       </stateVariable>
    </serviceStateTable>
 </scpd>
-)service_schema_xml";
+)service_sch_xml";
 #endif // EN_SSDP
 
 #if defined(EN_SWAGGER_UI)
-static const char _swagger_ui_html[] PROGMEM =
+static PGM_P _swagger_ui_html PROGMEM =
 R"swagger_ui(
 <!DOCTYPE html>
 <html>
@@ -341,7 +346,7 @@ R"swagger_ui(
     <script src='https://cdnjs.cloudflare.com/ajax/libs/marked/0.3.6/marked.min.js' type='text/javascript'></script>
     <script type="text/javascript">
         $(function() {
-            url = "http://192.168.1.1/alarmdecoder.json";
+            url = "/alarmdecoder.json";
             hljs.configure({
                 highlightSizeThreshold: 5000
             });
@@ -385,8 +390,8 @@ R"swagger_ui(
 </html>
 )swagger_ui";
 
-static const char _alarmdecoder_swagger_json[] PROGMEM =
-R"ad2swaggerjson(
+static PGM_P _alarmdecoder_swagger_json PROGMEM =
+R"ad2swagger_json(
 {
    "swagger":"2.0",
    "info":{
@@ -394,7 +399,7 @@ R"ad2swaggerjson(
       "version":"1.0.0",
       "title":"IoT application"
    },
-   "host":"192.168.1.1",
+   "host":"${0}",
    "tags":[
       {
          "name":"Temperature",
@@ -435,7 +440,7 @@ R"ad2swaggerjson(
       }
    }
 }
-)ad2swaggerjson";
+)ad2swagger_json";
 
 #endif
 #endif // CONFIG_H

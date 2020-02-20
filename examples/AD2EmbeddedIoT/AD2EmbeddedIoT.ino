@@ -72,7 +72,7 @@
  * Not in library manager.
  * cd ${home}/Arduino/libraries
  * git clone https://github.com/f34rdotcom/ESP32SSDP.git
- *  FIXME: The library needs work so I cloned it from for now.
+ *  FIXME: The library needs work so I cloned it from for now
  *    TODO: update parent https://github.com/luc-github/ESP32SSDP.git
  *    TODO: Add ModelDescription
  *    TODO: Add ability to set uuid
@@ -83,9 +83,12 @@
 
 
 /**
- * HTTPServer/HTTPServer server  v0.3.1 by Frank Hessel
+ * HTTPServer/HTTPServer server  v0.3.? by Frank Hessel
  * Library manager 'esp32_https_server'
  * https://github.com/fhessel/esp32_https_server
+ * must use github master branch for now.
+ * I am working with project dev to add features. It was merged
+ * into master and should get a release version soon.
  */
 #if defined(EN_HTTP)
 #include <HTTPServer.hpp>
@@ -96,6 +99,14 @@
 #include <HTTPSServer.hpp>
 #include <SSLCert.hpp>
 #endif
+
+/**
+ * TinyTemplateEngine v1.1.0 by full-stack-ex
+ * Library manager 'TinyTemplateEngine'
+ * https://github.com/full-stack-ex/tiny-template-engine-arduino
+ */
+#include "TinyTemplateEngine.h"
+#include "TinyTemplateEngineMemoryReader.h"
 
 /** 
  * Base settings tests.
@@ -738,12 +749,36 @@ void mqttLoop() {
 #endif
 
 #if defined(EN_HTTP) || defined(EN_HTTPS)
-// The hanlder functions are the same as in the Static-Page example.
-// The only difference is the check for isSecure in the root handler
+/**
+ * HTTP root page resopnse
+ */
 void handleRoot(HTTPRequest *req, HTTPResponse *res) {
+  // set content type
   res->setHeader("Content-Type", "text/html");
+
+  // build our template values
+  String szTime = String((int)(millis()/1000), DEC);
+  String szProt = String(req->isSecure() ? "HTTPS" : "HTTP");
+  String szIP = req->getClientIP().toString();
+  const char* values[] = {
+    szTime.c_str(), // For ${0}
+    szProt.c_str(), // For {$1}
+    szIP.c_str(),   // For {$2}
+    0 // guard
+  };
+
+  // init templateing
+  TinyTemplateEngineMemoryReader reader(_alarmdecoder_root_html);
+  reader.keepLineEnds(true);
+  TinyTemplateEngine engine(reader);
+
+  // process and send
+  engine.start(values);
   // Send content
-  res->printf(_alarmdecoder_root_html,(int)(millis()/1000),req->isSecure() ? "HTTPS" : "HTTP");
+  while (const char* line = engine.nextLine()) {
+    res->print(line);
+  }
+  engine.end();
 }
 
 /**
@@ -793,7 +828,26 @@ void handleSwaggerUI(HTTPRequest *req, HTTPResponse *res) {
 void handleSwaggerJSON(HTTPRequest *req, HTTPResponse *res) {
   // Set Content-Type
   res->setHeader("Content-Type", "text/json");
-  res->print(_alarmdecoder_swagger_json);
+
+  // build our template values
+  String szIP = req->getClientIP().toString();
+  const char* values[] = {
+    WiFi.localIP().toString().c_str(),// For {$0}
+    0 // guard
+  };
+
+  // init template engine
+  TinyTemplateEngineMemoryReader reader(_alarmdecoder_swagger_json);
+  reader.keepLineEnds(true);
+  TinyTemplateEngine engine(reader);
+
+  // process and send
+  engine.start(values);
+  // Send content
+  while (const char* line = engine.nextLine()) {
+    res->print(line);
+  }
+  engine.end();
 }
 #endif
 
