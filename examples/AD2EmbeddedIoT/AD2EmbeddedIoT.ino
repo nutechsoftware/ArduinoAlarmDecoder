@@ -34,6 +34,12 @@
 #include "secrets.h"
 
 /**
+ * Include SPIFFS & FS library for static content in program memeory.
+ */
+#include <SPIFFS.h>
+#include <FS.h>
+
+/**
  * AlarmDecoder Arduino library.
  * https://github.com/nutechsoftware/ArduinoAlarmDecoder
  */
@@ -167,6 +173,16 @@ std::map<String, uint32_t> TIME_MULTIPLIER = {{"SECONDS", 1 * 1000},{"MINUTES", 
 // HTTP/HTTPS server
 #if defined(EN_HTTP) || defined(EN_HTTPS)
 using namespace httpsserver;
+// extenion content types
+std::map<String, String> CONTENT_TYPES = {
+  {".html", "text/html"},
+  {".css", "text/css"},
+  {".js", "application/javascript"},
+  {".json", "application/json"},
+  {".xml", "application/xml"},
+  {".png", "image/png"},
+  {".jpg", "image/jpg"},
+};
 #endif
 #if defined(EN_HTTPS)
 // The HTTPS Server comes in a separate namespace. For easier use, include it here.
@@ -275,36 +291,40 @@ void setup()
 #endif // EN_MQTT_CLIENT
 
 #if defined(EN_SSDP)
-    SSDP.setSchemaURL("device_description.xml");
-    SSDP.setHTTPPort(80);
-    SSDP.setName("AlarmDecoder Embedded IoT");
-    SSDP.setSerialNumber("00000000");
-    SSDP.setURL("/");
-    SSDP.setModelName(BASE_HOST_NAME);
-    SSDP.setModelNumber("2.0");
-    //FIXME: SSDP.setModelDescription("AlarmDecoder Arduino embedded IoT appliance.");
-    SSDP.setModelURL("https://github.com/nutechsoftware/alarmdecoder-embedded");
-    SSDP.setManufacturer("Nu Tech Software, Solutions, Inc.");
-    SSDP.setManufacturerURL("http://www.alarmdecoder.com/");
-    //SSDP.setDeviceType("upnp:rootdevice");
-    //SSDP.setDeviceType("urn:schemas-upnp-org:device:Basic:1");
-    SSDP.setDeviceType("urn:schemas-upnp-org:device:AlarmDecoder:1");
-    //FIXME: set <serviceList><server>
-    //FIXME: set uuid
+  SSDP.setSchemaURL("device_description.xml");
+  SSDP.setHTTPPort(80);
+  SSDP.setName("AlarmDecoder Embedded IoT");
+  SSDP.setSerialNumber("00000000");
+  SSDP.setURL("/");
+  SSDP.setModelName(BASE_HOST_NAME);
+  SSDP.setModelNumber("2.0");
+  //FIXME: SSDP.setModelDescription("AlarmDecoder Arduino embedded IoT appliance.");
+  SSDP.setModelURL("https://github.com/nutechsoftware/alarmdecoder-embedded");
+  SSDP.setManufacturer("Nu Tech Software, Solutions, Inc.");
+  SSDP.setManufacturerURL("http://www.alarmdecoder.com/");
+  //SSDP.setDeviceType("upnp:rootdevice");
+  //SSDP.setDeviceType("urn:schemas-upnp-org:device:Basic:1");
+  SSDP.setDeviceType("urn:schemas-upnp-org:device:AlarmDecoder:1");
+  //FIXME: set <serviceList><server>
+  //FIXME: set uuid
 #endif // EN_SSDP
 
 #if defined(EN_HTTP) || defined(EN_HTTPS)
-ResourceNode * nodeRoot = new ResourceNode("/", "GET", &handleRoot);
-ResourceNode * nodeFavicon = new ResourceNode("/favicon.ico", "GET", &handleFavicon);
-ResourceNode * nodeAD2icon = new ResourceNode("/ad2icon.png", "GET", &handleAD2icon);
-ResourceNode * node404  = new ResourceNode("", "GET", &handle404);
-ResourceNode * nodeDeviceDescription = new ResourceNode("/device_description.xml", "GET", &handleDeviceDescription);
-ResourceNode * nodeServiceDescription = new ResourceNode("/AlarmDecoder.xml", "GET", &handleServiceDescription);
-ResourceNode * nodeEventSUBSCRIBE = new ResourceNode("/alarmdecoder/event", "SUBSCRIBE", &handleEventSUBSCRIBE);
-ResourceNode * nodeEventUNSUBSCRIBE = new ResourceNode("/alarmdecoder/event", "UNSUBSCRIBE", &handleEventUNSUBSCRIBE);
-#if defined(EN_SWAGGER_UI)
-ResourceNode * nodeSwaggerUI = new ResourceNode("/swaggerUI", "GET", &handleSwaggerUI);
-ResourceNode * nodeSwaggerJSON = new ResourceNode("/alarmdecoder.json", "GET", &handleSwaggerJSON);
+
+  // start SPIFFS flash file system driver
+  SPIFFS.begin();
+
+  ResourceNode * nodeRoot = new ResourceNode("/", "GET", &handleRoot);
+  ResourceNode * nodeFavicon = new ResourceNode("/favicon.ico", "GET", &handleFavicon);
+  ResourceNode * nodeAD2icon = new ResourceNode("/ad2icon.png", "GET", &handleAD2icon);
+  ResourceNode * node404  = new ResourceNode("", "GET", &handle404);
+  ResourceNode * nodeDeviceDescription = new ResourceNode("/device_description.xml", "GET", &handleDeviceDescription);
+  ResourceNode * nodeServiceDescription = new ResourceNode("/AlarmDecoder.xml", "GET", &handleServiceDescription);
+  ResourceNode * nodeEventSUBSCRIBE = new ResourceNode("/alarmdecoder/event", "SUBSCRIBE", &handleEventSUBSCRIBE);
+  ResourceNode * nodeEventUNSUBSCRIBE = new ResourceNode("/alarmdecoder/event", "UNSUBSCRIBE", &handleEventUNSUBSCRIBE);
+  #if defined(EN_SWAGGER_UI)
+  ResourceNode * nodeSwaggerUI = new ResourceNode("/swaggerUI", "GET", &handleSwaggerUI);
+  ResourceNode * nodeSwaggerJSON = new ResourceNode("/alarmdecoder.json", "GET", &handleSwaggerJSON);
 #endif // EN_SWAGGER_UI
 #if defined(EN_HTTP)
   insecureServer.registerNode(nodeRoot);
