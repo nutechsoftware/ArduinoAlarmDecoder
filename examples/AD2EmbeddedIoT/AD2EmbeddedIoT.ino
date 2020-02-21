@@ -162,12 +162,12 @@ typedef struct {
 } ssdp_subscriber_item_t;
 ssdp_subscriber_item_t *ssdp_subscribers[SSDP_MAX_SUBSCRIBERS] = {};
 std::map<String, uint32_t> TIME_MULTIPLIER = {{"SECONDS", 1 * 1000},{"MINUTES", 60 * 1000},{"HOURS", 3600 * 1000},{"DAYS", 86400 * 1000}};
-#endif
+#endif // EN_SSDP
 
+// HTTP/HTTPS server
 #if defined(EN_HTTP) || defined(EN_HTTPS)
 using namespace httpsserver;
 #endif
-// HTTP/HTTPS server
 #if defined(EN_HTTPS)
 // The HTTPS Server comes in a separate namespace. For easier use, include it here.
 // Create an SSL certificate object from the files included above
@@ -176,7 +176,7 @@ SSLCert cert = SSLCert(
   example_key_DER, example_key_DER_len
 );
 HTTPSServer secureServer = HTTPSServer(&cert);
-#endif
+#endif // EN_HTTPS
 #if defined(EN_HTTP)
 HTTPServer insecureServer = HTTPServer();
 #endif
@@ -195,8 +195,8 @@ void handleEventUNSUBSCRIBE(HTTPRequest * req, HTTPResponse * res);
 #ifdef EN_SWAGGER_UI
 void handleSwaggerUI(HTTPRequest * req, HTTPResponse * res);
 void handleSwaggerJSON(HTTPRequest * req, HTTPResponse * res);
-#endif
-#endif
+#endif // EN_SWAGGER_UI
+#endif // EN_HTTP || EN_HTTPS
 
 /**
  * generate AD2* uuid
@@ -241,7 +241,7 @@ void setup()
   // normal messages from AD2 on Vista 50PUL panel with one partition.
   // If any loop() method is busy too long alarm panel state data will be lost.
   Serial2.setRxBufferSize(2048);
-#endif
+#endif // AD2_UART
 
 #if defined(EN_ETH) || defined(EN_WIFI)
   WiFi.onEvent(networkEvent);
@@ -257,7 +257,7 @@ void setup()
       Serial.println("!DBG:AD2EMB,ETH setting static IP");
       ETH.config(static_ip, static_gw, static_subnet, static_dns1, static_dns2);
   }  
-#endif
+#endif // EN_ETH
 
 #if defined(EN_WIFI)
   // Start wifi
@@ -266,13 +266,13 @@ void setup()
   WiFi.mode(WIFI_STA);
   WiFi.disconnect(true);
   WiFi.begin(SECRET_WIFI_SSID, SECRET_WIFI_PASS);
-#endif
+#endif // EN_WIFI
 
 #if defined(EN_MQTT_CLIENT)
 #if defined(SECRET_MQTT_SERVER_CERT)
-#endif
+#endif // SECRET_MQTT_SERVER_CERT
   mqttSetup();
-#endif
+#endif // EN_MQTT_CLIENT
 
 #if defined(EN_SSDP)
     SSDP.setSchemaURL("device_description.xml");
@@ -291,7 +291,7 @@ void setup()
     SSDP.setDeviceType("urn:schemas-upnp-org:device:AlarmDecoder:1");
     //FIXME: set <serviceList><server>
     //FIXME: set uuid
-#endif
+#endif // EN_SSDP
 
 #if defined(EN_HTTP) || defined(EN_HTTPS)
 ResourceNode * nodeRoot = new ResourceNode("/", "GET", &handleRoot);
@@ -305,7 +305,7 @@ ResourceNode * nodeEventUNSUBSCRIBE = new ResourceNode("/alarmdecoder/event", "U
 #if defined(EN_SWAGGER_UI)
 ResourceNode * nodeSwaggerUI = new ResourceNode("/swaggerUI", "GET", &handleSwaggerUI);
 ResourceNode * nodeSwaggerJSON = new ResourceNode("/alarmdecoder.json", "GET", &handleSwaggerJSON);
-#endif
+#endif // EN_SWAGGER_UI
 #if defined(EN_HTTP)
   insecureServer.registerNode(nodeRoot);
   insecureServer.registerNode(nodeFavicon);
@@ -318,8 +318,8 @@ ResourceNode * nodeSwaggerJSON = new ResourceNode("/alarmdecoder.json", "GET", &
 #if defined(EN_SWAGGER_UI)
   insecureServer.registerNode(nodeSwaggerUI);
   insecureServer.registerNode(nodeSwaggerJSON);
-#endif
-#endif
+#endif // EN_SWAGGER_UI
+#endif // EN_HTTP
 #if defined(EN_HTTPS)
   secureServer.registerNode(nodeRoot);
   secureServer.registerNode(nodeFavicon);
@@ -330,9 +330,9 @@ ResourceNode * nodeSwaggerJSON = new ResourceNode("/alarmdecoder.json", "GET", &
 #if defined(EN_SWAGGER_UI)
   secureServer.registerNode(nodeSwaggerUI);
   secureServer.registerNode(nodeSwaggerJSON);
-#endif
-#endif
-#endif
+#endif // EN_SWAGGER_UI
+#endif // EN_HTTPS
+#endif // EN_HTTP || EN_HTTPS
 
   // AlarmDecoder wiring.
   AD2Parse.setCB_ON_MESSAGE(my_ON_MESSAGE_CB);
@@ -551,7 +551,7 @@ void networkEvent(WiFiEvent_t event)
       Serial.println("!DBG:AD2EMB,STA Stopped");
       wifi_connected = false;
       break;
-#endif
+#endif // EN_WIFI
 
 #if defined(EN_ETH)
     case SYSTEM_EVENT_ETH_START:
@@ -581,7 +581,7 @@ void networkEvent(WiFiEvent_t event)
       Serial.println("!DBG:AD2EMB,ETH Stopped");
       eth_connected = false;
       break;
-#endif  
+#endif // EN_ETH
       
     default:
       break;
@@ -746,7 +746,7 @@ void mqttLoop() {
       Serial.printf("!DBG:AD2EMB,TLAPS EXCEPTION B: %lu\n", mqtt_ping_delay);
     }
 }
-#endif
+#endif // EN_MQTT_CLIENT
 
 #if defined(EN_HTTP) || defined(EN_HTTPS)
 /**
@@ -761,13 +761,13 @@ void handleRoot(HTTPRequest *req, HTTPResponse *res) {
   String szProt = String(req->isSecure() ? "HTTPS" : "HTTP");
   String szIP = req->getClientIP().toString();
   const char* values[] = {
-    szTime.c_str(), // For ${0}
-    szProt.c_str(), // For {$1}
-    szIP.c_str(),   // For {$2}
+    szTime.c_str(), // match ${0}
+    szProt.c_str(), // match {$1}
+    szIP.c_str(),   // match {$2}
     0 // guard
   };
 
-  // init templateing
+  // init template engine
   TinyTemplateEngineMemoryReader reader(_alarmdecoder_root_html);
   reader.keepLineEnds(true);
   TinyTemplateEngine engine(reader);
@@ -830,9 +830,9 @@ void handleSwaggerJSON(HTTPRequest *req, HTTPResponse *res) {
   res->setHeader("Content-Type", "text/json");
 
   // build our template values
-  String szIP = req->getClientIP().toString();
+  String szIP = WiFi.localIP().toString();
   const char* values[] = {
-    WiFi.localIP().toString().c_str(),// For {$0}
+    szIP.c_str(),// match {$0}
     0 // guard
   };
 
@@ -849,7 +849,7 @@ void handleSwaggerJSON(HTTPRequest *req, HTTPResponse *res) {
   }
   engine.end();
 }
-#endif
+#endif // EN_SWAGGER_UI
 
 #if defined(EN_SSDP)
 /**
