@@ -11,8 +11,21 @@ The AD2EmbeddedIot Arduino sketch example has the following features that can be
 
 Using an Olimex ESP32-EVB-EA it takes 6 seconds after booting to connect to the network and start sending messages.
 
+## Arduino IDE Setup
+- Use the latest Arduino IDE(1.8.x)
+  - https://www.arduino.cc/en/main/software
+- Add support for ESP32 using the Boards Manager.
+ - Goto Tools > Board > Boards Manager...
+ - Search for 'ESP32 by Espressif Systems' press install.
+- Install esp32fs plugin(1.0) for SPIFFS support.
+  - https://github.com/me-no-dev/arduino-esp32fs-plugin
+
 ## Getting the code
+
 ## Configuring
+- Set partition scheme in Arduino IDE
+  - Minimal SPIFFS (Large APPS with OTA)
+
 ## Building
 
 ## Contributors

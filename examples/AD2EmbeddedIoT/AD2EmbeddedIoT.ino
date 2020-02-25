@@ -40,6 +40,17 @@
 #include <FS.h>
 
 /**
+ * TinyTemplateEngine v1.1.0 by full-stack-ex
+ * Library manager 'TinyTemplateEngine'
+ * https://github.com/full-stack-ex/tiny-template-engine-arduino
+ * 20200223SM: custom SPIFFS reader in contrib/tiny-template-arduino/
+ * place the .cpp and .h file into {arduino_home}/library/tiny-template-arduino/
+ * TODO: Send to repo mgr for consideration.
+ */
+#include "TinyTemplateEngine.h"
+#include "TinyTemplateEngineMemoryReader.h"
+#include "TinyTemplateEngineSPIFFSReader.h" // FIXME: 20200223SM custom mod
+/**
  * AlarmDecoder Arduino library.
  * https://github.com/nutechsoftware/ArduinoAlarmDecoder
  */
@@ -106,14 +117,6 @@
 #include <SSLCert.hpp>
 #endif
 
-/**
- * TinyTemplateEngine v1.1.0 by full-stack-ex
- * Library manager 'TinyTemplateEngine'
- * https://github.com/full-stack-ex/tiny-template-engine-arduino
- */
-#include "TinyTemplateEngine.h"
-#include "TinyTemplateEngineMemoryReader.h"
-
 /** 
  * Base settings tests.
  */
@@ -173,16 +176,6 @@ std::map<String, uint32_t> TIME_MULTIPLIER = {{"SECONDS", 1 * 1000},{"MINUTES", 
 // HTTP/HTTPS server
 #if defined(EN_HTTP) || defined(EN_HTTPS)
 using namespace httpsserver;
-// extenion content types
-std::map<String, String> CONTENT_TYPES = {
-  {".html", "text/html"},
-  {".css", "text/css"},
-  {".js", "application/javascript"},
-  {".json", "application/json"},
-  {".xml", "application/xml"},
-  {".png", "image/png"},
-  {".jpg", "image/jpg"},
-};
 #endif
 #if defined(EN_HTTPS)
 // The HTTPS Server comes in a separate namespace. For easier use, include it here.
@@ -191,27 +184,16 @@ SSLCert cert = SSLCert(
   example_crt_DER, example_crt_DER_len,
   example_key_DER, example_key_DER_len
 );
-HTTPSServer secureServer = HTTPSServer(&cert);
+HTTPSServer secureServer = HTTPSServer(&cert, HTTPS_PORT);
 #endif // EN_HTTPS
 #if defined(EN_HTTP)
-HTTPServer insecureServer = HTTPServer();
+HTTPServer insecureServer = HTTPServer(HTTP_PORT);
 #endif
 #if defined(EN_HTTP) || defined(EN_HTTPS)
-// static resources
-#include "src/static/favicon.h"
 // Declare some handler functions for the various URLs on the server
-void handleRoot(HTTPRequest * req, HTTPResponse * res);
-void handleFavicon(HTTPRequest * req, HTTPResponse * res);
-void handleAD2icon(HTTPRequest * req, HTTPResponse * res);
-void handle404(HTTPRequest * req, HTTPResponse * res);
-void handleDeviceDescription(HTTPRequest * req, HTTPResponse * res);
-void handleServiceDescription(HTTPRequest * req, HTTPResponse * res);
+void handleCatchAll(HTTPRequest * req, HTTPResponse * res);
 void handleEventSUBSCRIBE(HTTPRequest * req, HTTPResponse * res);
 void handleEventUNSUBSCRIBE(HTTPRequest * req, HTTPResponse * res);
-#ifdef EN_SWAGGER_UI
-void handleSwaggerUI(HTTPRequest * req, HTTPResponse * res);
-void handleSwaggerJSON(HTTPRequest * req, HTTPResponse * res);
-#endif // EN_SWAGGER_UI
 #endif // EN_HTTP || EN_HTTPS
 
 /**
@@ -258,6 +240,14 @@ void setup()
   // If any loop() method is busy too long alarm panel state data will be lost.
   Serial2.setRxBufferSize(2048);
 #endif // AD2_UART
+
+  // start SPIFFS flash file system driver
+  Serial.print("!DBG:AD2EMB,SPIFFS Start..");
+  if (!SPIFFS.begin(true)) {
+    Serial.println("Failed.");
+  } else {
+    Serial.println("Success..");
+  }
 
 #if defined(EN_ETH) || defined(EN_WIFI)
   WiFi.onEvent(networkEvent);
@@ -310,47 +300,18 @@ void setup()
 #endif // EN_SSDP
 
 #if defined(EN_HTTP) || defined(EN_HTTPS)
-
-  // start SPIFFS flash file system driver
-  SPIFFS.begin();
-
-  ResourceNode * nodeRoot = new ResourceNode("/", "GET", &handleRoot);
-  ResourceNode * nodeFavicon = new ResourceNode("/favicon.ico", "GET", &handleFavicon);
-  ResourceNode * nodeAD2icon = new ResourceNode("/ad2icon.png", "GET", &handleAD2icon);
-  ResourceNode * node404  = new ResourceNode("", "GET", &handle404);
-  ResourceNode * nodeDeviceDescription = new ResourceNode("/device_description.xml", "GET", &handleDeviceDescription);
-  ResourceNode * nodeServiceDescription = new ResourceNode("/AlarmDecoder.xml", "GET", &handleServiceDescription);
-  ResourceNode * nodeEventSUBSCRIBE = new ResourceNode("/alarmdecoder/event", "SUBSCRIBE", &handleEventSUBSCRIBE);
-  ResourceNode * nodeEventUNSUBSCRIBE = new ResourceNode("/alarmdecoder/event", "UNSUBSCRIBE", &handleEventUNSUBSCRIBE);
-  #if defined(EN_SWAGGER_UI)
-  ResourceNode * nodeSwaggerUI = new ResourceNode("/swaggerUI", "GET", &handleSwaggerUI);
-  ResourceNode * nodeSwaggerJSON = new ResourceNode("/alarmdecoder.json", "GET", &handleSwaggerJSON);
-#endif // EN_SWAGGER_UI
+  ResourceNode * nodeCatchAll = new ResourceNode("", "", &handleCatchAll);
+  ResourceNode * nodeEventSUBSCRIBE = new ResourceNode(HTTP_API_BASE "/event", "SUBSCRIBE", &handleEventSUBSCRIBE);
+  ResourceNode * nodeEventUNSUBSCRIBE = new ResourceNode(HTTP_API_BASE "/event", "UNSUBSCRIBE", &handleEventUNSUBSCRIBE);
 #if defined(EN_HTTP)
-  insecureServer.registerNode(nodeRoot);
-  insecureServer.registerNode(nodeFavicon);
-  insecureServer.registerNode(nodeAD2icon);
-  insecureServer.registerNode(nodeDeviceDescription);
-  insecureServer.registerNode(nodeServiceDescription);
+  insecureServer.setDefaultNode(nodeCatchAll);
   insecureServer.registerNode(nodeEventSUBSCRIBE);
   insecureServer.registerNode(nodeEventUNSUBSCRIBE);
-  insecureServer.setDefaultNode(node404);
-#if defined(EN_SWAGGER_UI)
-  insecureServer.registerNode(nodeSwaggerUI);
-  insecureServer.registerNode(nodeSwaggerJSON);
-#endif // EN_SWAGGER_UI
 #endif // EN_HTTP
 #if defined(EN_HTTPS)
-  secureServer.registerNode(nodeRoot);
-  secureServer.registerNode(nodeFavicon);
-  secureServer.registerNode(nodeAD2icon);
+  secureServer.setDefaultNode(nodeCatchAll);
   secureServer.registerNode(nodeDeviceDescription);
   secureServer.registerNode(nodeServiceDescription);
-  secureServer.setDefaultNode(node404);
-#if defined(EN_SWAGGER_UI)
-  secureServer.registerNode(nodeSwaggerUI);
-  secureServer.registerNode(nodeSwaggerJSON);
-#endif // EN_SWAGGER_UI
 #endif // EN_HTTPS
 #endif // EN_HTTP || EN_HTTPS
 
@@ -769,107 +730,131 @@ void mqttLoop() {
 #endif // EN_MQTT_CLIENT
 
 #if defined(EN_HTTP) || defined(EN_HTTPS)
+
 /**
- * HTTP root page resopnse
+ * Given a file name get the extension and return a mime type.
  */
-void handleRoot(HTTPRequest *req, HTTPResponse *res) {
-  // set content type
-  res->setHeader("Content-Type", "text/html");
+String getContentType(String filename) {
+  if (filename.endsWith(".html")) return "text/html";
+  else if (filename.endsWith(".css")) return "text/css";
+  else if (filename.endsWith(".js")) return "application/javascript";
+  else if (filename.endsWith(".xml")) return "application/xml";
+  else if (filename.endsWith(".json")) return "application/json";
+  else if (filename.endsWith(".ico")) return "image/x-icon";
+  else if (filename.endsWith(".jpg")) return "image/jpg";
+  else if (filename.endsWith(".png")) return "image/png";
+  else if (filename.endsWith(".gz")) return "application/x-gzip";
+  return "text/plain";
+}
 
-  // build our template values
-  String szTime = String((int)(millis()/1000), DEC);
-  String szProt = String(req->isSecure() ? "HTTPS" : "HTTP");
-  String szIP = req->getClientIP().toString();
-  const char* values[] = {
-    szTime.c_str(), // match ${0}
-    szProt.c_str(), // match {$1}
-    szIP.c_str(),   // match {$2}
-    0 // guard
-  };
+/**
+ * HTTP catch all.
+ *  1) Complete paths with Directory Index
+ *  2) Test for SPIFFS file
+ *  3) Apply templates if file with name+".tpl" exists.
+ *  4) Send 404 if not found
+ */
+void handleCatchAll(HTTPRequest *req, HTTPResponse *res) {
 
-  // init template engine
-  TinyTemplateEngineMemoryReader reader(_alarmdecoder_root_html);
-  reader.keepLineEnds(true);
-  TinyTemplateEngine engine(reader);
+  // send raw file or process as template
+  bool apply_template = false;
+  bool apply_gzip = false;
 
-  // process and send
-  engine.start(values);
-  // Send content
-  while (const char* line = engine.nextLine()) {
-    res->print(line);
+  // GET requests look for static template files
+  if (req->getMethod() == "GET") {
+    // Redirect / to /index.html
+    String reqFile = (req->getRequestString()=="/") ? ("/" HTTP_DIR_INDEX) : req->getRequestString().c_str();
+
+    // Set file path based upon request.
+    String filename = String(FS_PUBLIC_PATH) + reqFile;
+
+    // Check if same file with gz exist
+    if (SPIFFS.exists(filename+".gz")) {
+      Serial.printf("!DBG:AD2EMB,SPIFFS '%s.gz' found\n", filename.c_str());
+      // set content type
+      res->setHeader("Content-Type", getContentType(filename).c_str());
+
+      filename += ".gz";
+      apply_gzip = true;
+    } else
+    // Check if _NOT_ exists swap for 404.html
+    if (!SPIFFS.exists(filename.c_str())) {
+      Serial.printf("!DBG:AD2EMB,SPIFFS file not found '%s'\n", filename.c_str());
+      filename = FS_PUBLIC_PATH "/404.html";
+      // set content type
+      res->setHeader("Content-Type", getContentType(filename).c_str());
+    }
+
+    // Check if a flag file with the same name with .tpl extension exist.
+    String tpl = filename+".tpl";
+    if (!apply_gzip && SPIFFS.exists(tpl)) {
+      Serial.printf("!DBG:AD2EMB,SPIFFS '%s' found\n", tpl.c_str());
+      // set content type
+      res->setHeader("Content-Type", getContentType(filename).c_str());
+      apply_template = true;
+    } else {
+      Serial.printf("!DBG:AD2EMB,SPIFFS '%s' not found\n", tpl.c_str());
+    }
+
+    // Open the file
+    File file = SPIFFS.open(filename.c_str());
+
+    if (apply_gzip)
+      res->setHeader("Content-Encoding", "gzip");
+
+    // FIXME: add function will use it more than 1 time.
+    // apply template if set
+    if (apply_template) {
+      Serial.printf("!DBG:AD2EMB,SPIFFS applying template to file '%s'\n", filename.c_str());
+      
+      // build standard template values FIXME: function dynamic.      
+      String szVersion = "1.0";
+      String szTime = String((int)(millis()/1000), DEC);
+      String szLocalIP = WiFi.localIP().toString();
+      String szClientIP = req->getClientIP().toString();
+      String szProt = String(req->isSecure() ? "HTTPS" : "HTTP");
+      String szUUID; genUUID(0, szUUID);
+      
+      const char* values[] = {
+        szVersion.c_str(), // match ${0}
+        szTime.c_str(),    // match ${1}
+        szLocalIP.c_str(), // match ${2}
+        szClientIP.c_str(),// match ${3}
+        szProt.c_str(),    // match ${4}
+        szUUID.c_str(),    // match ${5}
+        0 // guard
+      };
+
+      // init template engine
+      TinyTemplateEngineSPIFFSReader reader(&file);
+      reader.keepLineEnds(true);
+      TinyTemplateEngine engine(reader);
+
+      // process and send
+      engine.start(values);
+
+      // Send content
+      while (const char* line = engine.nextLine()) {
+        res->print(line);
+      }
+      engine.end();
+    } else {
+      Serial.printf("!DBG:AD2EMB,SPIFFS spool raw file '%s'\n", filename.c_str());
+      // Set length if not a template but actual file.
+      res->setHeader("Content-Length", httpsserver::intToString(file.size()));
+      // Read the file and write it to the response
+      uint8_t buffer[1024];
+      ssize_t length = 0;
+      do {
+        length = file.read(buffer, 1024);
+        res->write(buffer, length);
+      } while (length > 0);
+    }
+
+    // Close the file
+    file.close();
   }
-  engine.end();
 }
-
-/**
- * HTTP 404 not found error resopnse
- */
-void handle404(HTTPRequest *req, HTTPResponse *res) {
-  req->discardRequestBody();
-  res->setStatusCode(404);
-  res->setStatusText("Not Found");
-  res->setHeader("Content-Type", "text/html");
-  // Send content
-  res->print(_alarmdecoder_404_html);
-}
-
-/**
- * HTTP response for favicon icon file
- */
-void handleFavicon(HTTPRequest *req, HTTPResponse *res) {
-  // Set Content-Type
-  res->setHeader("Content-Type", "image/vnd.microsoft.icon");
-  // Send content
-  res->write(favicon_ico, favicon_ico_len);
-}
-
-/**
- * HTTP resposne for AD2 Icon
- */
-void handleAD2icon(HTTPRequest *req, HTTPResponse *res) {
-  // Set Content-Type
-  res->setHeader("Content-Type", "image/png");
-  // Send content
-  res->write(ad2icon_png, ad2icon_png_len);
-}
-
-#if defined(EN_SWAGGER_UI)
-/**
- * HTTP response for SwaggerUI html file
- */
-void handleSwaggerUI(HTTPRequest *req, HTTPResponse *res) {
-  // Set Content-Type
-  res->setHeader("Content-Type", "text/html");
-  res->print(_swagger_ui_html);
-}
-/**
- * HTTP response for Swagger json file
- */
-void handleSwaggerJSON(HTTPRequest *req, HTTPResponse *res) {
-  // Set Content-Type
-  res->setHeader("Content-Type", "text/json");
-
-  // build our template values
-  String szIP = WiFi.localIP().toString();
-  const char* values[] = {
-    szIP.c_str(),// match {$0}
-    0 // guard
-  };
-
-  // init template engine
-  TinyTemplateEngineMemoryReader reader(_alarmdecoder_swagger_json);
-  reader.keepLineEnds(true);
-  TinyTemplateEngine engine(reader);
-
-  // process and send
-  engine.start(values);
-  // Send content
-  while (const char* line = engine.nextLine()) {
-    res->print(line);
-  }
-  engine.end();
-}
-#endif // EN_SWAGGER_UI
 
 #if defined(EN_SSDP)
 /**
@@ -975,29 +960,6 @@ void freeSubscriberLOC(uint8_t loc) {
 }
 
 /**
- * HTTP response for device description xml file
- */
-void handleDeviceDescription(HTTPRequest *req, HTTPResponse *res) {
-  // Set Content-Type
-  res->setHeader("Content-Type", "text/xml");
-  // Send schema
-  //String schema;
-  //SSDP.schema(schema);
-  //res->write((uint8_t*)schema.c_str(), schema.length());
-  res->print(_alarmdecoder_device_schema_xml);
-}
-
-/**
- * HTTP response for service description xml file
- */
-void handleServiceDescription(HTTPRequest *req, HTTPResponse *res) {
-  // Set Content-Type
-  res->setHeader("Content-Type", "text/xml");
-  // Write data from header file
-  res->printf(_alarmdecoder_service_schema_xml);
-}
-
-/**
  * HTTP response for service subscribe request
  */
 void handleEventSUBSCRIBE(HTTPRequest *req, HTTPResponse *res) {
@@ -1029,9 +991,6 @@ void handleEventUNSUBSCRIBE(HTTPRequest *req, HTTPResponse *res) {
     // Printf error
     Serial.printf("!DBG:AD2EMB,SSDP addSubscribe delete fail rc(%i)\n", rc);
   }
-
-  // Write data from header file
-  res->printf(_alarmdecoder_service_schema_xml);
 }
 #endif // EN_SSDP
 #endif // EN_HTTP || EN_HTTPS

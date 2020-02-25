@@ -1,0 +1,48 @@
+{
+   "swagger":"2.0",
+   "info":{
+      "description":"This is the AlarmDecoder Embedded IoT application.",
+      "version":"1.0.0",
+      "title":"AD2EMB IoT App"
+   },
+   "host":"${2}",
+   "tags":[
+      {
+         "name":"Temperature",
+         "description":"Getting temperature measurements"
+      }
+   ],
+   "paths":{
+      "/temperature":{
+         "get":{
+            "tags":[
+               "Temperature"
+            ],
+            "summary":"Endpoint for getting temperature measurements",
+            "description":"",
+            "operationId":"getTemperature",
+            "responses":{
+               "200":{
+                  "description":"A list of temperature measurements",
+                  "schema":{
+                     "$ref":"#/definitions/temperatureMeasurement"
+                  }
+               }
+            }
+         }
+      }
+   },
+   "definitions":{
+      "temperatureMeasurement":{
+         "type":"object",
+         "properties":{
+            "value":{
+               "type":"string"
+            },
+            "timestamp":{
+               "type":"string"
+            }
+         }
+      }
+   }
+}
