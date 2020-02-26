@@ -15,10 +15,22 @@ Using an Olimex ESP32-EVB-EA it takes 6 seconds after booting to connect to the 
 - Use the latest Arduino IDE(1.8.x)
   - https://www.arduino.cc/en/main/software
 - Add support for ESP32 using the Boards Manager.
- - Goto Tools > Board > Boards Manager...
+ - Goto Tools > Board > Boards Manager
  - Search for 'ESP32 by Espressif Systems' press install.
 - Install esp32fs plugin(1.0) for SPIFFS support.
   - https://github.com/me-no-dev/arduino-esp32fs-plugin
+- Install MQTT library
+  - Goto Tools > Manage Libraries
+  - Search for 'PubSubClient' and install v2.6.0 by Nick O'Leary
+- Install ESP32SSDP library
+  - Work in progress.
+  - https://github.com/f34rdotcom/ESP32SSDP/tree/reply-delay-fix-1
+- Install esp32_https_server
+  - Work in progress with repo manager to add IP Address info for client.
+  - https://github.com/fhessel/esp32_https_server
+- Install TinyTemplateEngine
+  - The custom SPIFFS reader module needs to be copied from contrib folder to library folder as the current version does not support SPIFFS sources.
+  - https://github.com/full-stack-ex/tiny-template-engine-arduino
 
 ## Getting the code
 

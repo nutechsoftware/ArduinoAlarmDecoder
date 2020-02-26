@@ -14,7 +14,6 @@
 //#define EN_HTTP
 //#define EN_HTTPS
 //#define EN_REST
-//#define EN_SWAGGER_UI
 
 
 /**
