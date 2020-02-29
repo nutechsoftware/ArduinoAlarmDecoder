@@ -80,6 +80,8 @@
 // PubSubClient v2.6.0 by Nick O'Leary
 // Library manager 'PubSubClient'
 // https://github.com/knolleary/pubsubclient
+// NOTE: Adjust timeout PubSubClient/PubSubClient.h
+//       MQTT_SOCKET_TIMEOUT from default of 15 to 2
 #include <PubSubClient.h>
 #endif // EN_MQTT_CLIENT
 
@@ -89,10 +91,6 @@
  * Not in library manager.
  * cd ${home}/Arduino/libraries
  * git clone https://github.com/f34rdotcom/ESP32SSDP.git
- *  FIXME: The library needs work so I cloned it from for now
- *    TODO: update parent https://github.com/luc-github/ESP32SSDP.git
- *    TODO: Add ModelDescription
- *    TODO: Add ability to set uuid
  */
 #if defined(EN_SSDP)
 #include <ESP32SSDP.h>
@@ -197,6 +195,26 @@ void handleEventUNSUBSCRIBE(HTTPRequest * req, HTTPResponse * res);
 #endif // EN_HTTP || EN_HTTPS
 
 /**
+ * generate uptime string
+ */
+void uptimeString(String &tstring)
+{
+  // 64bit milliseconds since boot
+  int64_t ms = esp_timer_get_time() / 1000;
+  // seconds
+  int32_t s = ms / 1000;
+  // days
+  int32_t d = s / 86400; s %= 86400;
+  // hours
+  uint8_t h = s / 3600; s %= 3600;
+  // minutes
+  uint8_t m = s / 60; s %= 60;
+  char fbuff[255];
+  snprintf(fbuff, sizeof(fbuff), "%04dd:%02dh:%02dm:%02ds", d, h, m, s);
+  tstring = fbuff;
+}
+
+/**
  * generate AD2* uuid
  */
 void genUUID(uint32_t n, String &ret) {
@@ -281,22 +299,15 @@ void setup()
 #endif // EN_MQTT_CLIENT
 
 #if defined(EN_SSDP)
+  String szUUID; genUUID(0, szUUID);
+  SSDP.setUUID(szUUID.c_str(), false);
+  SSDP.setInterval(1200);
+  SSDP.setServerName(BASE_HOST_NAME "/" BASE_HOST_VERSION);
   SSDP.setSchemaURL("device_description.xml");
   SSDP.setHTTPPort(80);
-  SSDP.setName("AlarmDecoder Embedded IoT");
-  SSDP.setSerialNumber("00000000");
-  SSDP.setURL("/");
   SSDP.setModelName(BASE_HOST_NAME);
   SSDP.setModelNumber("2.0");
-  //FIXME: SSDP.setModelDescription("AlarmDecoder Arduino embedded IoT appliance.");
-  SSDP.setModelURL("https://github.com/nutechsoftware/alarmdecoder-embedded");
-  SSDP.setManufacturer("Nu Tech Software, Solutions, Inc.");
-  SSDP.setManufacturerURL("http://www.alarmdecoder.com/");
-  //SSDP.setDeviceType("upnp:rootdevice");
-  //SSDP.setDeviceType("urn:schemas-upnp-org:device:Basic:1");
   SSDP.setDeviceType("urn:schemas-upnp-org:device:AlarmDecoder:1");
-  //FIXME: set <serviceList><server>
-  //FIXME: set uuid
 #endif // EN_SSDP
 
 #if defined(EN_HTTP) || defined(EN_HTTPS)
@@ -809,7 +820,8 @@ void handleCatchAll(HTTPRequest *req, HTTPResponse *res) {
       
       // build standard template values FIXME: function dynamic.      
       String szVersion = "1.0";
-      String szTime = String((int)(millis()/1000), DEC);
+      String szTime;
+      uptimeString(szTime);
       String szLocalIP = WiFi.localIP().toString();
       String szClientIP = req->getClientIP().toString();
       String szProt = String(req->isSecure() ? "HTTPS" : "HTTP");

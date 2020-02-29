@@ -20,6 +20,7 @@
  * Base identity settings
  */
 #define BASE_HOST_NAME  "AD2EMB"
+#define BASE_HOST_VERSION    "1.0"
 
 /**
  * Base network settings
