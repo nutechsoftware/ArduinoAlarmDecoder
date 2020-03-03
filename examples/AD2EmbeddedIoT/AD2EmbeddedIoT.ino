@@ -159,17 +159,17 @@ String mqtt_clientId;
 String mqtt_root;
 #endif // EN_MQTT_CLIENT
 
-// SSDP service
-#if defined(EN_SSDP)
+// REST service
+#if defined(EN_REST)
 typedef struct {
   unsigned long expire_time;
   String *host;
   String *callback;
   String *uuid;
-} ssdp_subscriber_item_t;
-ssdp_subscriber_item_t *ssdp_subscribers[SSDP_MAX_SUBSCRIBERS] = {};
+} rest_subscriber_item_t;
+rest_subscriber_item_t *rest_subscribers[REST_MAX_SUBSCRIBERS] = {};
 std::map<String, uint32_t> TIME_MULTIPLIER = {{"SECONDS", 1 * 1000},{"MINUTES", 60 * 1000},{"HOURS", 3600 * 1000},{"DAYS", 86400 * 1000}};
-#endif // EN_SSDP
+#endif // EN_REST
 
 // HTTP/HTTPS server
 #if defined(EN_HTTP) || defined(EN_HTTPS)
@@ -190,8 +190,10 @@ HTTPServer insecureServer = HTTPServer(HTTP_PORT);
 #if defined(EN_HTTP) || defined(EN_HTTPS)
 // Declare some handler functions for the various URLs on the server
 void handleCatchAll(HTTPRequest * req, HTTPResponse * res);
+#if defined(EN_REST)
 void handleEventSUBSCRIBE(HTTPRequest * req, HTTPResponse * res);
 void handleEventUNSUBSCRIBE(HTTPRequest * req, HTTPResponse * res);
+#endif // EN_REST
 #endif // EN_HTTP || EN_HTTPS
 
 /**
@@ -312,17 +314,33 @@ void setup()
 
 #if defined(EN_HTTP) || defined(EN_HTTPS)
   ResourceNode * nodeCatchAll = new ResourceNode("", "", &handleCatchAll);
+#if defined(EN_REST)
   ResourceNode * nodeEventSUBSCRIBE = new ResourceNode(HTTP_API_BASE "/event", "SUBSCRIBE", &handleEventSUBSCRIBE);
   ResourceNode * nodeEventUNSUBSCRIBE = new ResourceNode(HTTP_API_BASE "/event", "UNSUBSCRIBE", &handleEventUNSUBSCRIBE);
+#endif // EN_REST
 #if defined(EN_HTTP)
+  insecureServer.setDefaultHeader("Server", BASE_HOST_NAME "/" BASE_HOST_VERSION);
+  insecureServer.setDefaultHeader("Cache-Control", "no-cache, no-store, must-revalidate, private");
+  insecureServer.setDefaultHeader("Pragma", "no-cache");
+  insecureServer.setDefaultHeader("X-XSS-Protection", "1; mode=block");
+  insecureServer.setDefaultHeader("X-Frame-Options", "SAMEORIGIN");
   insecureServer.setDefaultNode(nodeCatchAll);
+#if defined(EN_REST)
   insecureServer.registerNode(nodeEventSUBSCRIBE);
   insecureServer.registerNode(nodeEventUNSUBSCRIBE);
+#endif // EN_REST
 #endif // EN_HTTP
 #if defined(EN_HTTPS)
-  secureServer.setDefaultNode(nodeCatchAll);
+  secureServer.setDefaultHeader("Server", BASE_HOST_NAME "/" BASE_HOST_VERSION);
+  secureServer.setDefaultHeader("Cache-Control", "no-cache, no-store, must-revalidate, private");
+  secureServer.setDefaultHeader("Pragma", "no-cache");
+  secureServer.setDefaultHeader("X-XSS-Protection", "1; mode=block");
+  secureServer.setDefaultHeader("X-Frame-Options", "SAMEORIGIN");
+  secureServer.setDefaultHeader("Connection", "close");
+#if defined(EN_REST)
   secureServer.registerNode(nodeDeviceDescription);
   secureServer.registerNode(nodeServiceDescription);
+#endif // EN_REST
 #endif // EN_HTTPS
 #endif // EN_HTTP || EN_HTTPS
 
@@ -398,17 +416,19 @@ void networkLoop() {
       Serial.println("!DBG:SSDP starting.");
       SSDP.begin();
       ssdp_started = true;
-    } else {
-      // remove expired subscriptions
-      for (int n = 0; n < SSDP_MAX_SUBSCRIBERS; n++) {
-        if (ssdp_subscribers[n]) {
-          if (millis() > ssdp_subscribers[n]->expire_time) {
-             freeSubscriberLOC(n);
-          }
+    }
+#endif
+
+#if defined(EN_REST)
+    // remove expired subscriptions
+    for (int n = 0; n < REST_MAX_SUBSCRIBERS; n++) {
+      if (rest_subscribers[n]) {
+        if (millis() > rest_subscribers[n]->expire_time) {
+           freeSubscriberLOC(n);
         }
       }
     }
-#endif
+#endif // EN_REST
 
 #if defined(EN_HTTP)
     static bool http_started = false;
@@ -792,6 +812,8 @@ void handleCatchAll(HTTPRequest *req, HTTPResponse *res) {
     if (!SPIFFS.exists(filename.c_str())) {
       Serial.printf("!DBG:AD2EMB,SPIFFS file not found '%s'\n", filename.c_str());
       filename = FS_PUBLIC_PATH "/404.html";
+      res->setStatusCode(404);
+      res->setStatusText("Not found");
       // set content type
       res->setHeader("Content-Type", getContentType(filename).c_str());
     }
@@ -865,10 +887,33 @@ void handleCatchAll(HTTPRequest *req, HTTPResponse *res) {
 
     // Close the file
     file.close();
+  } else {
+    // discard remaining data from client
+    req->discardRequestBody();
+    // Send "405 Method not allowed" as response
+    res->setStatusCode(405);
+    res->setStatusText("Method not allowed");
+    res->println("405 Method not allowed");
   }
 }
 
-#if defined(EN_SSDP)
+#if defined(EN_REST)
+bool checkAPIKey(HTTPRequest *req, HTTPResponse *res) {
+  bool ret = true;
+  String apikey = req->getHeader("Authorization").c_str();
+  if (!apikey.equals(SECRET_REST_KEY)) {
+    ret = false;
+    // discard remaining data from client
+    req->discardRequestBody();
+    // Send "405 Method not allowed" as response
+    res->setStatusCode(401);
+    res->setStatusText("Unauthorized");
+    res->println("401 Unauthorized");
+  }
+  return ret;
+}
+
+enum SSDP_RES { SSDP_UPDATED = 1, SSDP_ADDED = 0, SSDP_NO_SLOTS = -1, SSDP_NOT_FOUND = -2 };
 /**
  * Attempt to locate a free subscriber slot and fill it with subscriber info.
  * Set idx to < 0 to remove subscriber.
@@ -876,10 +921,8 @@ void handleCatchAll(HTTPRequest *req, HTTPResponse *res) {
  * return
  *     1: success updated entry
  *     0: success new entry
- *    -1: fail general
- *    -2: fail malloc fail
- *    -3: fail no slots
- *    -4: delete not found
+ *    -1: fail no slots
+ *    -2: delete not found
  */
 int8_t addSubscriber(HTTPRequest *req, int8_t *idx) {
   int8_t ret = 0;
@@ -891,10 +934,10 @@ int8_t addSubscriber(HTTPRequest *req, int8_t *idx) {
 
   // check for host + callback match
   bool found = false; int16_t loc = -1;
-  for (int n = 0; n < SSDP_MAX_SUBSCRIBERS; n++) {
-    if (ssdp_subscribers[n]) {
-      if (_host.equals(*ssdp_subscribers[n]->host) &&
-          _callback.equals(*ssdp_subscribers[n]->callback))
+  for (int n = 0; n < REST_MAX_SUBSCRIBERS; n++) {
+    if (rest_subscribers[n]) {
+      if (_host.equals(*rest_subscribers[n]->host) &&
+          _callback.equals(*rest_subscribers[n]->callback))
       {
         found = true;
         loc = n;
@@ -925,20 +968,21 @@ int8_t addSubscriber(HTTPRequest *req, int8_t *idx) {
   if (!found) {
     // free slot found for new entry
     if (loc > -1 && *idx > -1) {
-      ssdp_subscribers[loc] = new ssdp_subscriber_item_t;
-      ssdp_subscribers[loc]->host = new String(_host);
-      ssdp_subscribers[loc]->callback = new String(_callback);
-      ssdp_subscribers[loc]->uuid = new String;
-      genUUID(loc+1, *ssdp_subscribers[loc]->uuid);
-      ssdp_subscribers[loc]->expire_time = millis() + (TIME_MULTIPLIER[tkey] * tval);
+      rest_subscribers[loc] = new rest_subscriber_item_t;
+      rest_subscribers[loc]->host = new String(_host);
+      rest_subscribers[loc]->callback = new String(_callback);
+      rest_subscribers[loc]->uuid = new String;
+      genUUID(loc+1, *rest_subscribers[loc]->uuid);
+      rest_subscribers[loc]->expire_time = millis() + (TIME_MULTIPLIER[tkey] * tval);
       *idx = loc;
+      ret = SSDP_ADDED;
     } else {
       if (*idx > -1) {
         // delete not found
-        ret = -4;
+        ret = SSDP_NOT_FOUND;
       } else {
         // no free slot
-        ret = -3;
+        ret = SSDP_NO_SLOTS;
       }
     }
   } else {
@@ -946,10 +990,11 @@ int8_t addSubscriber(HTTPRequest *req, int8_t *idx) {
       // found existing delete requested.
       *idx = loc;
       freeSubscriberLOC(loc);
+      ret = SSDP_UPDATED;
     } else {
       // found existing set new exire time.
-      ssdp_subscribers[loc]->expire_time = millis() + (TIME_MULTIPLIER[tkey] * tval);
-      ret = 1;
+      rest_subscribers[loc]->expire_time = millis() + (TIME_MULTIPLIER[tkey] * tval);
+      ret = SSDP_UPDATED;
     }
     *idx = loc;
   }
@@ -960,15 +1005,15 @@ int8_t addSubscriber(HTTPRequest *req, int8_t *idx) {
  * Free contents of subscriber
  */
 void freeSubscriberLOC(uint8_t loc) {
-  Serial.printf("!DBG:AD2EMB,SSDP freeSubscriberLOC loc(%i) uuid(%s)\n", loc, ssdp_subscribers[loc]->uuid->c_str());
-  if (ssdp_subscribers[loc]->host)
-    delete ssdp_subscribers[loc]->host;
-  if (ssdp_subscribers[loc]->callback)
-    delete ssdp_subscribers[loc]->callback;
-  if (ssdp_subscribers[loc]->uuid)
-    delete ssdp_subscribers[loc]->uuid;
-  delete ssdp_subscribers[loc];
-  ssdp_subscribers[loc] = 0;
+  Serial.printf("!DBG:AD2EMB,SSDP freeSubscriberLOC loc(%i) uuid(%s)\n", loc, rest_subscribers[loc]->uuid->c_str());
+  if (rest_subscribers[loc]->host)
+    delete rest_subscribers[loc]->host;
+  if (rest_subscribers[loc]->callback)
+    delete rest_subscribers[loc]->callback;
+  if (rest_subscribers[loc]->uuid)
+    delete rest_subscribers[loc]->uuid;
+  delete rest_subscribers[loc];
+  rest_subscribers[loc] = 0;
 }
 
 /**
@@ -976,15 +1021,27 @@ void freeSubscriberLOC(uint8_t loc) {
  */
 void handleEventSUBSCRIBE(HTTPRequest *req, HTTPResponse *res) {
   // Set Content-Type
-  res->setHeader("Content-Type", "text/xml");
+  res->setHeader("Content-Type", "application/json");
 
   int8_t rc = -1, idx = 0;
+
+  // check api key
+  if(!checkAPIKey(req, res)) {
+    return;
+  }
+
   if ((rc = addSubscriber(req, &idx)) > -1) {
     // Success
-    Serial.printf("!DBG:AD2EMB,SSDP addSubscribe pass rc(%i) idx(%i) uuid(%s)\n", rc, idx, ssdp_subscribers[idx]->uuid->c_str());
+    Serial.printf("!DBG:AD2EMB,SSDP addSubscribe pass rc(%i) idx(%i) uuid(%s)\n", rc, idx, rest_subscribers[idx]->uuid->c_str());
   } else {
     // Printf error
     Serial.printf("!DBG:AD2EMB,SSDP addSubscribe fail rc(%i) idx(%i)\n", rc, idx);
+    // discard remaining data from client
+    req->discardRequestBody();
+    // We could not store the subscriber, no free slot.
+    res->setStatusCode(507);
+    res->setStatusText("Insufficient storage");
+    res->println("507 Insufficient storage");
   }
 }
 
@@ -1002,9 +1059,13 @@ void handleEventUNSUBSCRIBE(HTTPRequest *req, HTTPResponse *res) {
   } else {
     // Printf error
     Serial.printf("!DBG:AD2EMB,SSDP addSubscribe delete fail rc(%i)\n", rc);
+    // We could not find subscriber slot.
+    res->setStatusCode(409);
+    res->setStatusText("Application not subscribed to event source");
+    res->println("409 Application not subscribed to event source");
   }
 }
-#endif // EN_SSDP
+#endif // EN_REST
 #endif // EN_HTTP || EN_HTTPS
 
 /**

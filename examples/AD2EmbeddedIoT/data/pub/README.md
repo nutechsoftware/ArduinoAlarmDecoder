@@ -12,11 +12,11 @@ will inform the client on the stream being compressed data so it can decompress 
 
 Template macros:
  ${0}  - Device Version string
- ${1}  - Seconds uptime
+ ${1}  - Uptime string DDDDd:HHh:MMm:SSs
  ${2}  - This device ipv4 address HOST
  ${3}  - Web client ipv4 address
  ${4}  - Protocol [HTTP/HTTPS]
- ${5}  -
+ ${5}  - Device UUID
  ${6}  -
  ${7}  -
  ${8}  -

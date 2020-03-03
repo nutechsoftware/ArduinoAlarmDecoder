@@ -19,8 +19,8 @@
 /**
  * Base identity settings
  */
-#define BASE_HOST_NAME  "AD2EMB"
-#define BASE_HOST_VERSION    "1.0"
+#define BASE_HOST_NAME    "AD2EMB"
+#define BASE_HOST_VERSION "1.0"
 
 /**
  * Base network settings
@@ -118,7 +118,13 @@ IPAddress dhcp_fail_gw(169,254,0,1);
  * SSDP setings
  */
 #if defined(EN_SSDP)
-#define SSDP_MAX_SUBSCRIBERS 5
 #endif // EN_SSDP
+
+/**
+ * REST setings
+ */
+#if defined(EN_REST)
+#define REST_MAX_SUBSCRIBERS 5
+#endif // EN_REST
 
 #endif // CONFIG_H

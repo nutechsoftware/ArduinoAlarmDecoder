@@ -1,0 +1,175 @@
+openapi: 3.0.0
+info:
+  description: >-
+    This is an AlarmDecoder AD2 Embedded IoT server.  You can find out more
+    about the AlarmDecoder AD2EMB project on the <a
+    href="https://github.com/nutechsoftware/ArduinoAlarmDecoder">github project
+    page</a>.
+  version: "1.0.0-oas3"
+  title: AlarmDecoder Embedded API
+  contact:
+    email: alarmdecoder@support.nutech.com
+    name: 'AlarmDecoder AD2EMB - Nu Tech Software Solutions, Inc.'
+    url: 'https://www.alarmdecoder.com'
+  license:
+    name: Apache 2.0
+    url: 'http://www.apache.org/licenses/LICENSE-2.0.html'
+tags:
+  - name: admins
+    description: Secured Admin-only calls
+  - name: developers
+    description: Operations available to regular developers
+paths:
+  /alarmdecoder:
+    get:
+      summary: Get the status of the AlarmDecoder device.
+      parameters:
+        - in: query
+          name: apikey
+          description: Your user's api key
+          required: true
+          schema:
+            type: string
+      tags:
+        - alarmdecoder
+      responses:
+        '200':
+          description: Successful status message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlarmStatus'
+        '401':
+          description: Not authorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlarmStatusError'
+  /alarmdecoder/send:
+    post:
+      summary: Send keys to AlarmDecoder device
+      tags:
+        - alarmdecoder
+      parameters:
+        - in: query
+          name: apikey
+          description: Your user's api key
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Success - No content returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoContent'
+        '422':
+          description: Unprocessable Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlarmStatusError'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlarmDecoderSend'
+        description: Keys to send to AlarmDecoder Device
+        required: true
+components:
+  schemas:
+    AlarmStatus:
+      properties:
+        type:
+          type: string
+        power:
+          type: boolean
+        ready:
+          type: boolean
+        alarming:
+          type: boolean
+        bypassed:
+          type: boolean
+        armed_away:
+          type: boolean
+        armed_home:
+          type: boolean
+        alarm_fire:
+          type: boolean
+        battery:
+          type: boolean
+        alarm_panic:
+          type: boolean
+        chime:
+          type: boolean
+        perimeter_only:
+          type: boolean
+        entry_delay_off:
+          type: boolean
+        exit_now:
+          type: boolean
+        relays:
+          type: array
+          items:
+            type: object
+            properties:
+              address:
+                type: integer
+              channel:
+                type: integer
+              value:
+                type: integer
+        faults:
+          type: array
+          items:
+            type: object
+            properties:
+              zone:
+                type: integer
+              state:
+                type: integer
+      example:
+        type: Ademco
+        power: true
+        ready: false
+        alarming: false
+        armed: false
+        bypassed: false
+        armed_away: false
+        armed_home: false
+        alarm_fire: false
+        battery: false
+        alarm_panic: false
+        chime: false
+        perimeter_only: false
+        entry_delay_off: false
+        exit_now: false
+        relays:
+          - address: 18
+            channel: 1
+            value: 80
+        faults:
+          - '1': 1
+          - '2': 1
+    AlarmStatusError:
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+            message:
+              type: string
+      example:
+        error:
+          code: 401
+          message: An Error has occurred!
+    AlarmDecoderSend:
+      properties:
+        keys:
+          type: string
+      example:
+        keys: '41121'
+    NoContent:
+      properties: {}
