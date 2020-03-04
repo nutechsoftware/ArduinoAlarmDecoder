@@ -1,83 +1,76 @@
 openapi: 3.0.0
 info:
-  description: >-
-    This is an AlarmDecoder AD2 Embedded IoT server.  You can find out more
-    about the AlarmDecoder AD2EMB project on the <a
-    href="https://github.com/nutechsoftware/ArduinoAlarmDecoder">github project
-    page</a>.
-  version: "1.0.0-oas3"
-  title: AlarmDecoder Embedded API
+  title: AlarmDecoder Embedded API(AD2EMB)
+  description: Learn more about the <b>AlarmDecoder AD2EMB</b> project on the <a href="https://github.com/nutechsoftware/ArduinoAlarmDecoder">github project page</a>.
+  version: "1.2.0-oas3"
   contact:
     email: alarmdecoder@support.nutech.com
-    name: 'AlarmDecoder AD2EMB - Nu Tech Software Solutions, Inc.'
-    url: 'https://www.alarmdecoder.com'
+    name: AlarmDecoder
+    url: https://www.alarmdecoder.com/
   license:
     name: Apache 2.0
-    url: 'http://www.apache.org/licenses/LICENSE-2.0.html'
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
 tags:
-  - name: admins
-    description: Secured Admin-only calls
-  - name: developers
-    description: Operations available to regular developers
+  - name: event notification
+    description: Manage subscriptions to event push notifications.
+servers:
+  - url: /api/alarmdecoder
+    description: Base AD2EMB REST API path http://alarmdecoder.local/api/alarmdecoder
 paths:
-  /alarmdecoder:
-    get:
-      summary: Get the status of the AlarmDecoder device.
-      parameters:
-        - in: query
-          name: apikey
-          description: Your user's api key
-          required: true
-          schema:
-            type: string
+  /events:
+    post:
+      description: Subscribe to event push notifications.
+      security:
+        - apiKeyHeader: []
+        - apiKeyQuery: []
       tags:
-        - alarmdecoder
+        - event notification
       responses:
         '200':
-          description: Successful status message
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AlarmStatus'
-        '401':
-          description: Not authorized
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AlarmStatusError'
-  /alarmdecoder/send:
-    post:
-      summary: Send keys to AlarmDecoder device
-      tags:
-        - alarmdecoder
-      parameters:
-        - in: query
-          name: apikey
-          description: Your user's api key
-          required: true
-          schema:
-            type: string
-      responses:
-        '204':
-          description: Success - No content returned
+          description: Success.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/NoContent'
-        '422':
-          description: Unprocessable Entity
+        '401':
+          description: Not authorized.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AlarmStatusError'
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AlarmDecoderSend'
-        description: Keys to send to AlarmDecoder Device
-        required: true
+    delete:
+      description: Unsubscribe from event push notifications.
+      security:
+        - apiKeyHeader: []
+        - apiKeyQuery: []
+      tags:
+        - event notification
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: OK
+        '401':
+          description: Not authorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlarmStatusError'
 components:
+  securitySchemes:
+    apiKeyHeader:
+      description: API Key passed via Authorization Header.
+      type: apiKey
+      in: header
+      name: Authorization
+    apiKeyQuery:
+      description: API Key passed via query string.
+      type: apiKey
+      in: query
+      name: apikey
   schemas:
     AlarmStatus:
       properties:

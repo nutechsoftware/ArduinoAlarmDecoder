@@ -38,7 +38,12 @@ int AD2_SOCKPORT = 10000;
 // format args
 // 1-3: esp32 chip id
 // 4-7: unique 32 bit value
-#define SECRET_SSDP_UUID_FORMAT    "41443245-4d42-4544-44%02x-%02x%02x%02x%02x%02x%02x"
+#define SECRET_SSDP_UUID_FORMAT   "41443245-4d42-4544-44%02x-%02x%02x%02x%02x%02x%02x"
+
+/**
+ * REST api settings
+ */
+#define SECRET_REST_KEY           "SOMEPRIVATESTRING"
 
 /**
  * MQTT Client SECRETS/SETTINGS
