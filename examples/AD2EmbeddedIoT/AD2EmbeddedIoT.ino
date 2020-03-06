@@ -773,6 +773,7 @@ String getContentType(String filename) {
   else if (filename.endsWith(".json")) return "application/json";
   else if (filename.endsWith(".ico")) return "image/x-icon";
   else if (filename.endsWith(".jpg")) return "image/jpg";
+  else if (filename.endsWith(".svg")) return "image/svg+xml";
   else if (filename.endsWith(".png")) return "image/png";
   else if (filename.endsWith(".gz")) return "application/x-gzip";
   return "text/plain";
@@ -874,6 +875,8 @@ void handleCatchAll(HTTPRequest *req, HTTPResponse *res) {
       engine.end();
     } else {
       Serial.printf("!DBG:AD2EMB,SPIFFS spool raw file '%s'\n", filename.c_str());
+      // set content type
+      res->setHeader("Content-Type", getContentType(filename).c_str());
       // Set length if not a template but actual file.
       res->setHeader("Content-Length", httpsserver::intToString(file.size()));
       // Read the file and write it to the response
