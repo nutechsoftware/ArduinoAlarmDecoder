@@ -29,14 +29,12 @@
 #include "Arduino.h"
 
 // types and defines
-typedef void (*AD2ParserCallback_msg_t)(void*);
-
 
 enum AD2_PARSER_STATES {
-	AD2_PARSER_RESET            = 0,
-	AD2_PARSER_SCANNING_START   = 1,
-	AD2_PARSER_SCANNING_EOL     = 2,
-	AD2_PARSER_PROCESSING       = 3
+  AD2_PARSER_RESET            = 0,
+  AD2_PARSER_SCANNING_START   = 1,
+  AD2_PARSER_SCANNING_EOL     = 2,
+  AD2_PARSER_PROCESSING       = 3
 };
 
 // The actual max is ~90 but leave some room for future.
@@ -46,6 +44,19 @@ enum AD2_PARSER_STATES {
 #define BIT_ON '1'
 #define BIT_OFF '0'
 #define BIT_UNDEFINED '-'
+
+/** example Keypad Message.
+[10000001000000003A--],008,[f70600ff1008001c08020000000000],"****DISARMED****  Ready to Arm  "
+*/
+// KPI
+#define SECTION_1_START     0
+#define SECTION_2_START    23
+#define SECTION_3_START    27
+#define SECTION_4_START    61
+#define AMASK_START        30
+#define AMASK_END          38
+#define CURSOR_TYPE_POS    SECTION_3_START+19
+#define CURSOR_POS         SECTION_3_START+21
 
 // BIT/DATA OFFSETS
 #define READY_BYTE          1
@@ -64,9 +75,11 @@ enum AD2_PARSER_STATES {
 #define FIRE_BYTE          14
 #define SYSISSUE_BYTE      15
 #define PERIMETERONLY_BYTE 16
+#define SYSSPECIFIC_BYTE   17
+#define PANEL_TYPE_BYTE    18
+#define UNUSED_1_BYTE      19
+#define UNUSED_2_BYTE      20
 
-#define AMASK_START        30
-#define AMASK_END          38
 
 
 
@@ -114,48 +127,48 @@ enum AD2_PARSER_STATES {
  */
 class AD2VirtualPartitionState
 {
-	public:
+  public:
 
   // Address mask filter for this partition
-	uint32_t address_mask_filter;
+  uint32_t address_mask_filter;
 
   // Partition number(external lookup required for Ademco)
   uint8_t partition;
 
   // Calculated from section #3(Raw)
-	uint8_t display_cursor_location; // 1-32
-  uint8_t display_cursor_type;     // 0[OFF] 1[UNDERLINE] 2[INVERT]
-
+  uint8_t display_cursor_type = 0;     // 0[OFF] 1[UNDERLINE] 2[INVERT]
+  uint8_t display_cursor_location = 0; // 1-32
 
   // SECTION #1 data
   //  https://www.alarmdecoder.com/wiki/index.php/Protocol#Bit_field
-	bool ready;
-	bool armed_away;
-	bool armed_home;
-	bool backlight_on;
-	bool programming_mode;
-	bool zone_bypassed;
-	bool ac_power;
-	bool chime_on;
-	bool alarm_event_occurred;
-	bool alarm_sounding;
-	bool battery_low;
-	bool entry_delay_off;
-	bool fire_alarm;
-	bool check_zone;
-	bool perimeter_only;
-	bool system_fault;
-	uint8_t beeps;
-	char panel_type;
-  bool unused1;
-  bool unused2;
+  bool ready = false;
+  bool armed_away = false;
+  bool armed_home = false;
+  bool backlight_on = false;
+  bool programming_mode = false;
+  bool zone_bypassed = false;
+  bool ac_power = false;
+  bool chime_on = false;
+  bool alarm_event_occurred = false;
+  bool alarm_sounding = false;
+  bool battery_low = false;
+  bool entry_delay_off = false;
+  bool fire_alarm = false;
+  bool system_issue = false;
+  bool perimeter_only = false;
+  bool system_specific = false;
+  uint8_t beeps = 0;
+  char panel_type = '?';
+  bool unused1 = false;
+  bool unused2 = false;
 
-	String last_alpha_message;
-	String last_numeric_message;
+  String last_alpha_message = "";
+  String last_numeric_message = "";
 
 };
 
 typedef std::map<uint32_t, AD2VirtualPartitionState *> ad2pstates_t;
+typedef void (*AD2ParserCallback_msg_t)(String*, AD2VirtualPartitionState*);
 
 /**
  * AlarmDecoder protocol parser.
@@ -169,72 +182,72 @@ class AlarmDecoderParser
 {
   public:
 
-		AlarmDecoderParser();
+    AlarmDecoderParser();
 
     // Subscribe to callbacks.
-		void setCB_ON_RAW_MESSAGE(AD2ParserCallback_msg_t cb);
+    void setCB_ON_RAW_MESSAGE(AD2ParserCallback_msg_t cb);
     void setCB_ON_ARM(AD2ParserCallback_msg_t cb);
     void setCB_ON_DISARM(AD2ParserCallback_msg_t cb);
-		void setCB_ON_POWER_CHANGE(AD2ParserCallback_msg_t cb);
-		void setCB_ON_READY_CHANGE(AD2ParserCallback_msg_t cb);
-		void setCB_ON_ALARM(AD2ParserCallback_msg_t cb);
-		void setCB_ON_ALARM_RESTORED(AD2ParserCallback_msg_t cb);
-		void setCB_ON_FIRE(AD2ParserCallback_msg_t cb);
-		void setCB_ON_BYPASS(AD2ParserCallback_msg_t cb);
-		void setCB_ON_BOOT(AD2ParserCallback_msg_t cb);
-		void setCB_ON_CONFIG_RECEIVED(AD2ParserCallback_msg_t cb);
-		void setCB_ON_ZONE_FAULT(AD2ParserCallback_msg_t cb);
-		void setCB_ON_ZONE_RESTORE(AD2ParserCallback_msg_t cb);
-		void setCB_ON_LOW_BATTERY(AD2ParserCallback_msg_t cb);
-		void setCB_ON_PANIC(AD2ParserCallback_msg_t cb);
-		void setCB_ON_RELAY_CHANGED(AD2ParserCallback_msg_t cb);
-		void setCB_ON_CHIME_CHANGED(AD2ParserCallback_msg_t cb);
-		void setCB_ON_MESSAGE(AD2ParserCallback_msg_t cb);
-		void setCB_ON_EXPANDER_MESSAGE(AD2ParserCallback_msg_t cb);
-		void setCB_ON_LRR(AD2ParserCallback_msg_t cb);
-		void setCB_ON_RFX(AD2ParserCallback_msg_t cb);
-		void setCB_ON_SENDING_RECEIVED(AD2ParserCallback_msg_t cb);
-		void setCB_ON_AUI(AD2ParserCallback_msg_t cb);
-		void setCB_ON_KPM(AD2ParserCallback_msg_t cb);
-		void setCB_ON_KPE(AD2ParserCallback_msg_t cb);
-		void setCB_ON_CRC(AD2ParserCallback_msg_t cb);
-		void setCB_ON_VER(AD2ParserCallback_msg_t cb);
-		void setCB_ON_ERR(AD2ParserCallback_msg_t cb);
+    void setCB_ON_POWER_CHANGE(AD2ParserCallback_msg_t cb);
+    void setCB_ON_READY_CHANGE(AD2ParserCallback_msg_t cb);
+    void setCB_ON_ALARM(AD2ParserCallback_msg_t cb);
+    void setCB_ON_ALARM_RESTORED(AD2ParserCallback_msg_t cb);
+    void setCB_ON_FIRE(AD2ParserCallback_msg_t cb);
+    void setCB_ON_BYPASS(AD2ParserCallback_msg_t cb);
+    void setCB_ON_BOOT(AD2ParserCallback_msg_t cb);
+    void setCB_ON_CONFIG_RECEIVED(AD2ParserCallback_msg_t cb);
+    void setCB_ON_ZONE_FAULT(AD2ParserCallback_msg_t cb);
+    void setCB_ON_ZONE_RESTORE(AD2ParserCallback_msg_t cb);
+    void setCB_ON_LOW_BATTERY(AD2ParserCallback_msg_t cb);
+    void setCB_ON_PANIC(AD2ParserCallback_msg_t cb);
+    void setCB_ON_RELAY_CHANGED(AD2ParserCallback_msg_t cb);
+    void setCB_ON_CHIME_CHANGED(AD2ParserCallback_msg_t cb);
+    void setCB_ON_MESSAGE(AD2ParserCallback_msg_t cb);
+    void setCB_ON_EXPANDER_MESSAGE(AD2ParserCallback_msg_t cb);
+    void setCB_ON_LRR(AD2ParserCallback_msg_t cb);
+    void setCB_ON_RFX(AD2ParserCallback_msg_t cb);
+    void setCB_ON_SENDING_RECEIVED(AD2ParserCallback_msg_t cb);
+    void setCB_ON_AUI(AD2ParserCallback_msg_t cb);
+    void setCB_ON_KPM(AD2ParserCallback_msg_t cb);
+    void setCB_ON_KPE(AD2ParserCallback_msg_t cb);
+    void setCB_ON_CRC(AD2ParserCallback_msg_t cb);
+    void setCB_ON_VER(AD2ParserCallback_msg_t cb);
+    void setCB_ON_ERR(AD2ParserCallback_msg_t cb);
 
     // Callback functino pointers.
-		AD2ParserCallback_msg_t ON_RAW_MESSAGE_CB;
+    AD2ParserCallback_msg_t ON_RAW_MESSAGE_CB;
     AD2ParserCallback_msg_t ON_ARM_CB;
     AD2ParserCallback_msg_t ON_DISARM_CB;
-		AD2ParserCallback_msg_t ON_POWER_CHANGE_CB;
-		AD2ParserCallback_msg_t ON_READY_CHANGE_CB;
-		AD2ParserCallback_msg_t ON_ALARM_CB;
-		AD2ParserCallback_msg_t ON_ALARM_RESTORED_CB;
-		AD2ParserCallback_msg_t ON_FIRE_CB;
-		AD2ParserCallback_msg_t ON_BYPASS_CB;
-		AD2ParserCallback_msg_t ON_BOOT_CB;
-		AD2ParserCallback_msg_t ON_CONFIG_RECEIVED_CB;
-		AD2ParserCallback_msg_t ON_ZONE_FAULT_CB;
-		AD2ParserCallback_msg_t ON_ZONE_RESTORE_CB;
-		AD2ParserCallback_msg_t ON_LOW_BATTERY_CB;
-	  AD2ParserCallback_msg_t ON_PANIC_CB;
-		AD2ParserCallback_msg_t ON_RELAY_CHANGED_CB;
-		AD2ParserCallback_msg_t ON_CHIME_CHANGED_CB;
-		AD2ParserCallback_msg_t ON_MESSAGE_CB;
+    AD2ParserCallback_msg_t ON_POWER_CHANGE_CB;
+    AD2ParserCallback_msg_t ON_READY_CHANGE_CB;
+    AD2ParserCallback_msg_t ON_ALARM_CB;
+    AD2ParserCallback_msg_t ON_ALARM_RESTORED_CB;
+    AD2ParserCallback_msg_t ON_FIRE_CB;
+    AD2ParserCallback_msg_t ON_BYPASS_CB;
+    AD2ParserCallback_msg_t ON_BOOT_CB;
+    AD2ParserCallback_msg_t ON_CONFIG_RECEIVED_CB;
+    AD2ParserCallback_msg_t ON_ZONE_FAULT_CB;
+    AD2ParserCallback_msg_t ON_ZONE_RESTORE_CB;
+    AD2ParserCallback_msg_t ON_LOW_BATTERY_CB;
+    AD2ParserCallback_msg_t ON_PANIC_CB;
+    AD2ParserCallback_msg_t ON_RELAY_CHANGED_CB;
+    AD2ParserCallback_msg_t ON_CHIME_CHANGED_CB;
+    AD2ParserCallback_msg_t ON_MESSAGE_CB;
     AD2ParserCallback_msg_t ON_EXPANDER_MESSAGE_CB;
-		AD2ParserCallback_msg_t ON_LRR_CB;
-		AD2ParserCallback_msg_t ON_RFX_CB;
-		AD2ParserCallback_msg_t ON_SENDING_RECEIVED_CB;
-		AD2ParserCallback_msg_t ON_AUI_CB;
-		AD2ParserCallback_msg_t ON_KPM_CB;
-		AD2ParserCallback_msg_t ON_KPE_CB;
-		AD2ParserCallback_msg_t ON_CRC_CB;
-		AD2ParserCallback_msg_t ON_VER_CB;
-		AD2ParserCallback_msg_t ON_ERR_CB;
+    AD2ParserCallback_msg_t ON_LRR_CB;
+    AD2ParserCallback_msg_t ON_RFX_CB;
+    AD2ParserCallback_msg_t ON_SENDING_RECEIVED_CB;
+    AD2ParserCallback_msg_t ON_AUI_CB;
+    AD2ParserCallback_msg_t ON_KPM_CB;
+    AD2ParserCallback_msg_t ON_KPE_CB;
+    AD2ParserCallback_msg_t ON_CRC_CB;
+    AD2ParserCallback_msg_t ON_VER_CB;
+    AD2ParserCallback_msg_t ON_ERR_CB;
 
 
-		// Push data into state machine. Events fire if a complete message is
-		// received.
-		bool put(uint8_t *buf, int8_t len);
+    // Push data into state machine. Events fire if a complete message is
+    // received.
+    bool put(uint8_t *buf, int8_t len);
 
     // Reset the parser state machine.
     void reset_parser();
@@ -245,16 +258,16 @@ class AlarmDecoderParser
 
 
 
-	protected:
-		// Track all panel states in separate class.
-		ad2pstates_t AD2PStates;
+  protected:
+    // Track all panel states in separate class.
+    ad2pstates_t AD2PStates;
 
-	  // Parser state control starts out as AD2_PARSER_RESET.
-		int AD2_Parser_State;
+    // Parser state control starts out as AD2_PARSER_RESET.
+    int AD2_Parser_State;
 
     // ring buffer must be < 128 bytes using signed int8 for pointer variable.
-		uint8_t ring_buffer[ALARMDECODER_MAX_MESSAGE_SIZE];
-		int8_t ring_qin_position, ring_qout_position;
+    uint8_t ring_buffer[ALARMDECODER_MAX_MESSAGE_SIZE];
+    int8_t ring_qin_position, ring_qout_position;
     uint16_t ring_error_count;
 
 };

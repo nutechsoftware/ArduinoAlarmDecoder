@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>App</title>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <link rel="stylesheet" href="app.css">
+  <link href="https://fonts.googleapis.com/css?family=Roboto&display=swap" rel="stylesheet">
+</head>
+
+<body>
+  <div id="app">
+    <section id="navigation">
+      <ul>
+        <li><a href="#">Dashboard</a></li>
+        <li><a href="#">Activity</a></li>
+        <li><a href="#">Apps</a></li>
+      </ul>
+    </section>
+
+    <section id="status" class="not_ready">
+      <div>
+        <span class="icon house with_lock"></span>
+        <h2>NOT READY</h2>
+      </div>
+    </section>
+
+    <section id="controls">
+      <a href="#" class="control large">
+        <div>
+          <div class="icon house with_key"></div><br>
+          <span>AWAY</span>
+        </div>
+      </a>
+      <a href="#" class="control large">
+        <div>
+          <div class="icon house with_key"></div><br>
+          <span>STAY</span>
+        </div>
+      </a>
+      <div class="control large has_children">
+        <a href="#" class="control small">
+          <div>
+            <div class="icon police"></div><br>
+            <span>PANIC</span>
+          </div>
+        </a>
+        <a href="#" class="control small">
+          <div>
+            <div class="icon fire"></div><br>
+            <span>FIRE</span>
+          </div>
+        </a>
+        <a href="#" class="control small">
+          <div>
+            <div class="icon aux"></div><br>
+            <span>AUX</span>
+          </div>
+        </a>
+        <a href="#" class="control small">
+          <div>
+            <div class="icon refresh"></div><br>
+            <span>REFRESH</span>
+          </div>
+        </a>
+      </div>
+    </section>
+
+    <section id="zones">
+      <div class="zone">
+        <a href="#"><span>12</span></a>
+      </div>
+      <div class="zone">
+        <a href="#"><span>16</span></a>
+      </div>
+      <div class="zone empty"></div>
+      <div class="zone empty"></div>
+      <div class="zone empty"></div>
+      <div class="zone empty"></div>
+      <div class="zone empty"></div>
+      <div class="zone empty"></div>
+      <div class="zone empty"></div>
+      <div class="zone empty"></div>
+      <div class="zone empty"></div>
+      <div class="zone empty"></div>
+    </section>
+  </div>
+  <div style="overflow:scroll;height:300px" id="divOut">Not connected...</div>
+  <script type="text/javascript">
+    var panel_states =  {
+      "armed":{
+        "class":"armed",
+        "label":"Armed"
+      },
+      "armed_exit":{
+        "class":"armed",
+        "label":"Armed (exit-now)"
+      },
+      "armed_stay":{
+        "class":"armed",
+        "label":"Armed (stay)"
+      },
+      "armed_stay_exit":{
+        "class":"armed",
+        "label":"Armed (exit-now)"
+      },
+      "armed_night":{
+        "class":"armed",
+        "label":"Armed (night)"
+      },
+      "armed_night_exit":{
+        "class":"armed",
+        "label":"Armed (exit-now)"
+      },
+      "alarming":{
+        "class":"alarming",
+        "label":"Alarming!"
+      },
+      "fire":{
+        "class":"alarming",
+        "label":"Fire!"
+      },
+      "ready":{
+        "class":"ready",
+        "label":"Ready"
+      },
+      "notready":{
+        "class":"not_ready",
+        "label":"Not Ready"
+      }
+    }
+    const elem = id => document.getElementById(id);
+    const divOut = elem("divOut");
+
+    class AD2ws {
+      constructor() {
+          this.connecting = false;
+          this.connected = false;
+          this.ws = null;
+      }
+
+      /* connect WS to AD2 IoT device. */
+      connect() {
+          if (this.ws === null) {
+              console.log("Connecting.");
+              divOut.innerHTML = "<p>Connecting.</p>";
+              this.connecting = true;
+              this.ws = new WebSocket("ws://" + document.location.host + "/ad2ws");
+
+              /* FIXME: need send request for update on state */
+              this.ws.onopen = e => {
+                  console.log("onopen");
+                  this.connecting = false;
+                  this.connected = true;
+                  divOut.innerHTML = "<p>Connected.</p>";
+                  this.sendMessage("hello");
+              };
+              /* FIXME: needs more cow bell */
+              this.ws.onmessage = e => {
+                  console.log("onmessage. '" + e.data + "'");
+                  var myObj = JSON.parse(e.data);
+                  /* simple state machine for now to set status class */
+                  if (myObj.ready) {
+                    document.getElementById("status").className = "ready";
+                  } else {
+                    if (myObj.armed_away || myObj.armed_home) {
+                      document.getElementById("status").className = "armed";
+                    } else {
+                      if (myObj.alarm_sounding) {
+                        document.getElementById("status").className = "alarming";
+                      } else {
+                        document.getElementById("status").className = "not-ready";
+                      }
+                    }
+                  }
+              }
+              /* FIXME: need reconnect timer */
+              this.ws.onclose = e => {
+                  console.log("onclose.");
+                  divOut.innerHTML = "<p>Closed.</p>";
+                  this.disconnect();
+              }
+          }
+      }
+
+      /* FIXME: not needed? */
+      disconnect() {
+          if (this.ws !== null) {
+              this.sendMessage("goodbye");
+              this.ws.close();
+              this.ws = null;
+          }
+          if (this.connected) {
+              this.connected = false;
+              divOut.innerHTML+="<p>Disconnected.</p>";
+          }
+      }
+
+      /* FIXME: docs on simple ws request api */
+      sendMessage(msg) {
+          if (this.ws !== null) {
+              this.ws.send(msg);
+          }
+      }
+    };
+    let ad2ws = new AD2ws();
+    ad2ws.connect();
+  </script>
+</body>
+</html>

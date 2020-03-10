@@ -184,7 +184,7 @@ bool AlarmDecoderParser::put(uint8_t *buff, int8_t len) {
 
           // call ON_RAW_MESSAGE callback if enabled.
           if (ON_RAW_MESSAGE_CB) {
-            ON_RAW_MESSAGE_CB((void*)&msg);
+            ON_RAW_MESSAGE_CB(&msg, nullptr);
           }
 
           // Detect message type or error.
@@ -198,56 +198,57 @@ bool AlarmDecoderParser::put(uint8_t *buff, int8_t len) {
             if (msg.startsWith("!LRR:")) {
               // call ON_LRR callback if enabled.
               if (ON_LRR_CB) {
-                ON_LRR_CB((void*)&msg);
+                ON_LRR_CB(&msg, nullptr);
               }
             } else
             if (msg.startsWith("!REL:") || msg.startsWith("!EXP:")) {
               // call ON_EXPANDER_MESSAGE callback if enabled.
               if (ON_EXPANDER_MESSAGE_CB) {
-                ON_EXPANDER_MESSAGE_CB((void*)&msg);
+                ON_EXPANDER_MESSAGE_CB(&msg, nullptr);
               }
             } else
             if (msg.startsWith("!RFX:")) {
               // call ON_RFX callback if enabled.
               if (ON_RFX_CB) {
-                ON_RFX_CB((void*)&msg);
+                ON_RFX_CB(&msg, nullptr);
               }
             } else
             if (msg.startsWith("!AUI:")) {
               // call ON_AUI callback if enabled.
               if (ON_AUI_CB) {
-                ON_AUI_CB((void*)&msg);
+                ON_AUI_CB(&msg, nullptr);
               }
             } else
             if (msg.startsWith("!KPM:")) {
+              // FIXME: move parser below to function so it can be called here.
               // call ON_KPM callback if enabled.
               if (ON_KPM_CB) {
-                ON_KPM_CB((void*)&msg);
+                ON_KPM_CB(&msg, nullptr);
               }
             } else
             if (msg.startsWith("!KPE:")) {
               // call ON_KPE callback if enabled.
               if (ON_KPE_CB) {
-                ON_KPE_CB((void*)&msg);
+                ON_KPE_CB(&msg, nullptr);
               }
             } else
             if (msg.startsWith("!CRC:")) {
               // call ON_CRC callback if enabled.
               if (ON_CRC_CB) {
-                ON_CRC_CB((void*)&msg);
+                ON_CRC_CB(&msg, nullptr);
               }
             } else
             if (msg.startsWith("!VER:")) {
               // Parse the version string.
               // call ON_VER callback if enabled.
               if (ON_VER_CB) {
-                ON_VER_CB((void*)&msg);
+                ON_VER_CB(&msg, nullptr);
               }
             } else
             if (msg.startsWith("!ERR:")) {
               // call ON_ERR callback if enabled.
               if (ON_ERR_CB) {
-                ON_ERR_CB((void*)&msg);
+                ON_ERR_CB(&msg, nullptr);
               }
             }
           } else {
@@ -261,8 +262,8 @@ bool AlarmDecoderParser::put(uint8_t *buff, int8_t len) {
 
                 // First extract the 32 bit address mask from section #3
                 // to use it as a storage key for the state.
-                uint32_t amask = strtol( msg.substring(AMASK_START,
-                                        AMASK_END).c_str(), NULL, 16);
+                uint32_t amask = strtol(msg.substring(AMASK_START,
+                                        AMASK_END).c_str(), nullptr, 16);
 
                 amask = AD2_NTOHL(amask);
                 // Ademco/DSC: MASK 00000000 = System
@@ -272,7 +273,7 @@ bool AlarmDecoderParser::put(uint8_t *buff, int8_t len) {
                 // Ademco 40000000 is keypad address 30
 
                 // Create or return a pointer to our partition storage class.
-                AD2VirtualPartitionState *ad2ps = NULL;
+                AD2VirtualPartitionState *ad2ps = nullptr;
 
                 // look for an exact match.
                 if ( AD2PStates.find(amask) == AD2PStates.end()) {
@@ -298,7 +299,8 @@ bool AlarmDecoderParser::put(uint8_t *buff, int8_t len) {
                         // remove the old map entry.
                         AD2PStates.erase(foundkey);
                         // Add new one with mask of original + new.
-                        AD2PStates[amask | foundkey] = ad2ps;
+                        amask |= foundkey;
+                        AD2PStates[amask] = ad2ps;
                       }
                   }
 
@@ -313,20 +315,41 @@ bool AlarmDecoderParser::put(uint8_t *buff, int8_t len) {
                   ad2ps = AD2PStates[amask];
                 }
 
+                // store key internal for easy use.
+                ad2ps->address_mask_filter = amask;
 
                 // Update the partition state based upon the new status message.
+                // FIXME: Next.
 
                 // Extract state bits from section #1
-                ad2ps->ready      = is_bit_set( READY_BYTE, msg.c_str());
-                ad2ps->armed_away = is_bit_set( ARMED_AWAY_BYTE, msg.c_str());
-                ad2ps->armed_home = is_bit_set( ARMED_HOME_BYTE, msg.c_str());
-                ad2ps->zone_bypassed = is_bit_set( BYPASS_BYTE, msg.c_str());
+                ad2ps->ready = is_bit_set(READY_BYTE, msg.c_str());
+                ad2ps->armed_away = is_bit_set(ARMED_AWAY_BYTE, msg.c_str());
+                ad2ps->armed_home = is_bit_set(ARMED_HOME_BYTE, msg.c_str());
+                ad2ps->backlight_on  = is_bit_set(BACKLIGHT_BYTE, msg.c_str());
+                ad2ps->programming_mode = is_bit_set(PROGMODE_BYTE, msg.c_str());
+                ad2ps->zone_bypassed = is_bit_set(BYPASS_BYTE, msg.c_str());
+                ad2ps->ac_power = is_bit_set(ACPOWER_BYTE, msg.c_str());
+                ad2ps->chime_on = is_bit_set(CHIME_BYTE, msg.c_str());
+                ad2ps->alarm_event_occurred = is_bit_set(ALARMSTICKY_BYTE, msg.c_str());
+                ad2ps->alarm_sounding = is_bit_set(ALARM_BYTE, msg.c_str());
+                ad2ps->battery_low = is_bit_set(LOWBATTERY_BYTE, msg.c_str());
+                ad2ps->entry_delay_off = is_bit_set(ENTRYDELAY_BYTE, msg.c_str());
+                ad2ps->fire_alarm = is_bit_set(FIRE_BYTE, msg.c_str());
+                ad2ps->system_issue = is_bit_set(SYSISSUE_BYTE, msg.c_str());
+                ad2ps->perimeter_only = is_bit_set(PERIMETERONLY_BYTE, msg.c_str());
+                ad2ps->system_specific = is_bit_set(SYSSPECIFIC_BYTE, msg.c_str());
+                ad2ps->beeps = msg[BEEPMODE_BYTE];
+                ad2ps->panel_type = msg[PANEL_TYPE_BYTE];
 
-                // Extract the numberic value from section #2
+                // Extract the numeric value from section #2
+                ad2ps->last_numeric_message = strtol(msg.substring(SECTION_2_START, SECTION_2_START+3).c_str(), 0, 10);
 
-                // Extract the Alpha message from section #4.
+                // Extract the 32 char Alpha message from section #4.
+                ad2ps->last_alpha_message = msg.substring(SECTION_4_START, SECTION_4_START+32);
 
                 // Extract the cursor location and type from section #3
+                ad2ps->display_cursor_type = (uint8_t) strtol(msg.substring(CURSOR_TYPE_POS, CURSOR_TYPE_POS+2).c_str(), 0, 16);
+                ad2ps->display_cursor_location = (uint8_t) strtol(msg.substring(CURSOR_POS, CURSOR_POS+2).c_str(), 0, 16);
 
                 // FIXME: debugging / testing
                 Serial.print("!DBG: SIZE(");
@@ -347,7 +370,7 @@ bool AlarmDecoderParser::put(uint8_t *buff, int8_t len) {
 
                 // call ON_MESSAGE callback if enabled.
                 if (ON_MESSAGE_CB) {
-                  ON_MESSAGE_CB((void*)&msg);
+                  ON_MESSAGE_CB(&msg, ad2ps);
                 }
               }
             } else {

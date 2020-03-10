@@ -63,7 +63,7 @@
 #include <ETH.h>
 #endif
 
-/** 
+/**
  * Arduino/Espressif built in support for WiFi
  * FIXME: 20200103SM reconnect after wifi drop not working.
  *   * (maybe bound it inside of event handler for wifi)
@@ -114,15 +114,18 @@
 #include <HTTPSServer.hpp>
 #include <SSLCert.hpp>
 #endif
+#if defined(EN_HTTP) || defined(EN_HTTPS)
+#include <WebsocketHandler.hpp>
+#endif
 
-/** 
+/**
  * Base settings tests.
  */
 #if defined(EN_ETH) + defined(EN_WIFI) == 0
 #error Must define at least one network interface
 #endif
 
-/** 
+/**
  * Global/Static/constant state variables
  */
 // Network state variables.
@@ -161,19 +164,50 @@ String mqtt_root;
 
 // REST service
 #if defined(EN_REST)
+
+/**
+ * We use JSON as data format. Make sure to have the lib available
+ * arduinojson library v6.14.1 by Benoît Blanchon
+ * Library manager 'arduinojson'
+ * https://github.com/bblanchon/ArduinoJson
+ */
+#include <ArduinoJson.h>
+
+// subscriber storage structure
 typedef struct {
   unsigned long expire_time;
   String *host;
   String *callback;
   String *uuid;
 } rest_subscriber_item_t;
+
+// Active subscribers tracking array
 rest_subscriber_item_t *rest_subscribers[REST_MAX_SUBSCRIBERS] = {};
+
+// Human readable time to ms conversion for header parsing
 std::map<String, uint32_t> TIME_MULTIPLIER = {{"SECONDS", 1 * 1000},{"MINUTES", 60 * 1000},{"HOURS", 3600 * 1000},{"DAYS", 86400 * 1000}};
 #endif // EN_REST
 
 // HTTP/HTTPS server
 #if defined(EN_HTTP) || defined(EN_HTTPS)
 using namespace httpsserver;
+
+// Websocket handler class
+class WSClientHandler : public WebsocketHandler {
+public:
+  // This method is called by the webserver to instantiate a new handler for each
+  // client that connects to the websocket endpoint
+  static WebsocketHandler* create();
+
+  // This method is called when a message arrives
+  void onMessage(WebsocketInputStreambuf * input);
+
+  // Handler function on connection close
+  void onClose();
+};
+
+// Simple array to store the active web socket clients:
+WSClientHandler* activeWSClients[HTTP_MAX_WS_CLIENTS];
 #endif
 #if defined(EN_HTTPS)
 // The HTTPS Server comes in a separate namespace. For easier use, include it here.
@@ -182,10 +216,14 @@ SSLCert cert = SSLCert(
   example_crt_DER, example_crt_DER_len,
   example_key_DER, example_key_DER_len
 );
-HTTPSServer secureServer = HTTPSServer(&cert, HTTPS_PORT);
+//FIXME: Setting to 8 sockets for bug in lib.
+//need to close sockets more agressively.
+HTTPSServer secureServer = HTTPSServer(&cert, HTTPS_PORT, 8);
 #endif // EN_HTTPS
 #if defined(EN_HTTP)
-HTTPServer insecureServer = HTTPServer(HTTP_PORT);
+//FIXME: Setting to 8 sockets for bug in lib.
+//need to close sockets more agressively.
+HTTPServer insecureServer = HTTPServer(HTTP_PORT, 8);
 #endif
 #if defined(EN_HTTP) || defined(EN_HTTPS)
 // Declare some handler functions for the various URLs on the server
@@ -234,6 +272,78 @@ void genUUID(uint32_t n, String &ret) {
 }
 
 /**
+ * simple reverse string missing in std libs?
+ */
+char *strrev(char *str)
+{
+    if (!str || ! *str)
+        return str;
+
+    int i = strlen(str) - 1, j = 0;
+
+    char ch;
+    while (i > j)
+    {
+        ch = str[i];
+        str[i] = str[j];
+        str[j] = ch;
+        i--;
+        j++;
+    }
+    return str;
+}
+
+/**
+ * Create a json state structure from AD2VirtualPartitionState
+ */
+void jsonAD2VirtualPartitionState(AD2VirtualPartitionState *s, std::string &json) {
+    // Allocate JsonBuffer
+  DynamicJsonDocument doc(500);
+
+  // Add elements
+  String szTime; uptimeString(szTime);
+  doc["uptime"] = szTime;
+
+  // Build simple address mask for use by js client.
+  // The 32 byte string represents each address or partition
+  // from 0 to 31 from left to right.
+  // Example: 0100000000000000100000000000010
+  //           |              |
+  //           |              Addrss 16(Ademco) Partition 16(DSC)
+  //           Address 1(Ademco) or Partition 1(DSC)
+  String szmask = "00000000000000000000000000000000";
+  szmask += String(s->address_mask_filter, BIN);
+  doc["address_mask_filter"] = strrev((char *)szmask.substring(szmask.length()-32,szmask.length()).c_str());
+
+  // Alarm panel states from section #1 of the AlarmDecoder API
+  doc["display_cursor_type"] = s->display_cursor_type;
+  doc["display_cursor_location"] = s->display_cursor_location;
+  doc["ready"] = s->ready;
+  doc["armed_away"] = s->armed_away;
+  doc["armed_home"] = s->armed_home;
+  doc["backlight_on"] = s->backlight_on;
+  doc["programming_mode"] = s->programming_mode;
+  doc["zone_bypassed"] = s->zone_bypassed;
+  doc["ac_power"] = s->ac_power;
+  doc["chime_on"] = s->chime_on;
+  doc["alarm_event_occured"] = s->alarm_event_occurred;
+  doc["alarm_sounding"] = s->alarm_sounding;
+  doc["battery_low"] = s->battery_low;
+  doc["entry_delay_off"] = s->entry_delay_off;
+  doc["fire_alarm"] = s->fire_alarm;
+  doc["system_issue"] = s->system_issue;
+  doc["perimeter_only"] = s->perimeter_only;
+  doc["system_specific"] = s->system_specific;
+  doc["beeps"] = String((char)s->beeps);
+  doc["panel_type"] = String((char)s->panel_type);
+  doc["last_alpha_message"] = s->last_alpha_message;
+  doc["last_numeric_message"] = s->last_numeric_message;
+
+  // create std::string for websocket lib and fill it with final json string
+  serializeJson(doc, json);
+}
+
+/**
  * Arduino Sketch setup()
  *   Called once after hardware powers on.
  */
@@ -241,7 +351,7 @@ void setup()
 {
   // small delay on startup
   delay(5000);
-  
+
   // Open host UART
   Serial.begin(115200);
   Serial.println();
@@ -277,12 +387,12 @@ void setup()
   // Start ethernet
   Serial.println("!DBG:AD2EMB,ETH Start wait for interface ready");
   ETH.begin();
-  ETH.setHostname(BASE_HOST_NAME);  
+  ETH.setHostname(BASE_HOST_NAME);
   // Static IP or DHCP?
   if (static_ip != (uint32_t)0x00000000) {
       Serial.println("!DBG:AD2EMB,ETH setting static IP");
       ETH.config(static_ip, static_gw, static_subnet, static_dns1, static_dns2);
-  }  
+  }
 #endif // EN_ETH
 
 #if defined(EN_WIFI)
@@ -319,6 +429,8 @@ void setup()
   ResourceNode * nodeEventUNSUBSCRIBE = new ResourceNode(HTTP_API_BASE "/event", "UNSUBSCRIBE", &handleEventUNSUBSCRIBE);
 #endif // EN_REST
 #if defined(EN_HTTP)
+  WebsocketNode * ad2wsNode = new WebsocketNode("/ad2ws", &WSClientHandler::create);
+  insecureServer.registerNode(ad2wsNode);
   insecureServer.setDefaultHeader("Server", BASE_HOST_NAME "/" BASE_HOST_VERSION);
   insecureServer.setDefaultHeader("Cache-Control", "no-cache, no-store, must-revalidate, private");
   insecureServer.setDefaultHeader("Pragma", "no-cache");
@@ -331,12 +443,13 @@ void setup()
 #endif // EN_REST
 #endif // EN_HTTP
 #if defined(EN_HTTPS)
+  secureServer.registerNode(ad2wsNode);
   secureServer.setDefaultHeader("Server", BASE_HOST_NAME "/" BASE_HOST_VERSION);
   secureServer.setDefaultHeader("Cache-Control", "no-cache, no-store, must-revalidate, private");
   secureServer.setDefaultHeader("Pragma", "no-cache");
   secureServer.setDefaultHeader("X-XSS-Protection", "1; mode=block");
   secureServer.setDefaultHeader("X-Frame-Options", "SAMEORIGIN");
-  secureServer.setDefaultHeader("Connection", "close");
+  secureServer.setDefaultNode(nodeCatchAll);
 #if defined(EN_REST)
   secureServer.registerNode(nodeDeviceDescription);
   secureServer.registerNode(nodeServiceDescription);
@@ -366,7 +479,7 @@ void loop()
 
   // AD2* message processing
   ad2Loop();
-  
+
   // Networking ETH/WiFi persistent connection state machine cycles
   networkLoop();
 
@@ -379,7 +492,7 @@ void loop()
  *  1) Monitor network hardware.
  *  2) Keep connections persistent.
  *  3) Respond to connection activity.
- *  
+ *
  */
 void networkLoop() {
 
@@ -540,7 +653,7 @@ void networkEvent(WiFiEvent_t event)
   switch (event) {
 
 #if defined(EN_WIFI)
-    case SYSTEM_EVENT_WIFI_READY: 
+    case SYSTEM_EVENT_WIFI_READY:
       Serial.println("!DBG:AD2EMB,WiFi interface ready");
       wifi_ready = true;
       break;
@@ -594,7 +707,7 @@ void networkEvent(WiFiEvent_t event)
       eth_connected = false;
       break;
 #endif // EN_ETH
-      
+
     default:
       break;
   }
@@ -615,9 +728,9 @@ Serial.println("!DBG:AD2EMB,Network reset close all connections");
 #if defined(EN_MQTT_CLIENT)
 /**
  * MQTT Client reporting service
- * 
+ *
  *  1) Stay connected to a server.
- *     PubSubClient.cpp sends network PING to ensure the 
+ *     PubSubClient.cpp sends network PING to ensure the
  *     client stays connected to the server.
  *
  *  2) Publish periodic messages to subscriber(s) to ensure
@@ -678,7 +791,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
  */
 bool mqttConnect() {
   bool res = true;
-  
+
   if(!mqttClient.connected()) {
     Serial.print("!DBG:AD2EMB,MQTT connection starting...");
     // Attempt to connect
@@ -707,7 +820,7 @@ void mqttLoop() {
     /// delay: counters must be signed to easily detect overflow by going negative
     static long mqtt_reconnect_delay = 0;
     static long mqtt_ping_delay = 0;
-  
+
     /// state: fire off a message on first connect.
     static uint8_t mqtt_signon_sent = 0;
 
@@ -724,7 +837,7 @@ void mqttLoop() {
         if (mqtt_reconnect_delay<=0){
           mqtt_reconnect_delay=0;
           if (!mqttConnect()) {
-            mqtt_reconnect_delay = MQTT_CONNECT_RETRY_INTERVAL;         
+            mqtt_reconnect_delay = MQTT_CONNECT_RETRY_INTERVAL;
           }
         }
         if (mqttClient.connected()) {
@@ -779,6 +892,47 @@ String getContentType(String filename) {
   return "text/plain";
 }
 
+
+/**
+ * Create and track handlers for each client.
+ */
+WebsocketHandler * WSClientHandler::create() {
+  Serial.printf("!DBG:AD2EMB,WS new client\n");
+  WSClientHandler * handler = new WSClientHandler();
+  for(int i = 0; i < HTTP_MAX_WS_CLIENTS; i++) {
+    if (activeWSClients[i] == nullptr) {
+      activeWSClients[i] = handler;
+      break;
+    }
+  }
+  return handler;
+}
+
+/**
+ * Cleanup handlers
+ */
+void WSClientHandler::onClose() {
+  for(int i = 0; i < HTTP_MAX_WS_CLIENTS; i++) {
+    if (activeWSClients[i] == this) {
+      activeWSClients[i] = nullptr;
+    }
+  }
+}
+
+/**
+ * Handle WS client messages
+ */
+void WSClientHandler::onMessage(WebsocketInputStreambuf * inbuf) {
+  // Get the input message
+  std::ostringstream ss;
+  std::string msg;
+  ss << inbuf;
+  msg = ss.str();
+  Serial.printf("!DBG:AD2EMB,WS message '%s'\n", msg.c_str());
+}
+
+
+
 /**
  * HTTP catch all.
  *  1) Complete paths with Directory Index
@@ -794,6 +948,11 @@ void handleCatchAll(HTTPRequest *req, HTTPResponse *res) {
 
   // GET requests look for static template files
   if (req->getMethod() == "GET") {
+
+    // FIXME: Library needs a way to force browser to close connections.
+    // this does not work because library changes it later.
+    res->setHeader("Connection", "close");
+
     // Redirect / to /index.html
     String reqFile = (req->getRequestString()=="/") ? ("/" HTTP_DIR_INDEX) : req->getRequestString().c_str();
 
@@ -840,8 +999,8 @@ void handleCatchAll(HTTPRequest *req, HTTPResponse *res) {
     // apply template if set
     if (apply_template) {
       Serial.printf("!DBG:AD2EMB,SPIFFS applying template to file '%s'\n", filename.c_str());
-      
-      // build standard template values FIXME: function dynamic.      
+
+      // build standard template values FIXME: function dynamic.
       String szVersion = "1.0";
       String szTime;
       uptimeString(szTime);
@@ -849,7 +1008,7 @@ void handleCatchAll(HTTPRequest *req, HTTPResponse *res) {
       String szClientIP = req->getClientIP().toString();
       String szProt = String(req->isSecure() ? "HTTPS" : "HTTP");
       String szUUID; genUUID(0, szUUID);
-      
+
       const char* values[] = {
         szVersion.c_str(), // match ${0}
         szTime.c_str(),    // match ${1}
@@ -891,6 +1050,9 @@ void handleCatchAll(HTTPRequest *req, HTTPResponse *res) {
     // Close the file
     file.close();
   } else {
+    // FIXME: Library needs a way to force browser to close connections.
+    // this does not work because library changes it later.
+    res->setHeader("Connection", "close");
     // discard remaining data from client
     req->discardRequestBody();
     // Send "405 Method not allowed" as response
@@ -959,7 +1121,7 @@ int8_t addSubscriber(HTTPRequest *req, int8_t *idx) {
   if (_timeout.length()) {
     char *tmult = strtok((char*)_timeout.c_str(), "-");
     if (tmult) {
-      char *szval = strtok(NULL, "");
+      char *szval = strtok(nullptr, "");
       if (szval) {
         tval = atoi(szval);
         tkey = strupr(tmult);
@@ -1077,15 +1239,26 @@ void handleEventUNSUBSCRIBE(HTTPRequest *req, HTTPResponse *res) {
  * When a complete messages is received or a specific stream of
  * bytes is received event(s) will be called.
  */
- 
+
 /**
  * ON_MESSAGE
  * When a full standard alarm state message is received before it is parsed.
  * WARNING: It may be invalid.
  */
-void my_ON_MESSAGE_CB(void *msg) {
-  String* sp = (String *)msg;
-  Serial.println(*sp);
+void my_ON_MESSAGE_CB(String *msg, AD2VirtualPartitionState *s) {
+  Serial.println(*msg);
+
+  // catpure the current state as json string
+  std::string json;
+  jsonAD2VirtualPartitionState(s, json);
+
+  // Send updated state to every ws client
+  for(int i = 0; i < HTTP_MAX_WS_CLIENTS; i++) {
+    if (activeWSClients[i] != nullptr) {
+      // Send json string to the client
+      activeWSClients[i]->send(json, 0x02);
+    }
+  }
 }
 
 /**
@@ -1093,7 +1266,6 @@ void my_ON_MESSAGE_CB(void *msg) {
  * When a LRR message is received.
  * WARNING: It may be invalid.
  */
-void my_ON_LRR_CB(void *msg) {
-  String* sp = (String *)msg;
-  Serial.println(*sp);
+void my_ON_LRR_CB(String *msg, AD2VirtualPartitionState *s) {
+  Serial.println(*msg);
 }

@@ -112,6 +112,7 @@ IPAddress dhcp_fail_gw(169,254,0,1);
 #define HTTP_PORT 80
 #define HTTPS_PORT 443
 #define HTTP_API_BASE "/api/alarmdecoder"
+#define HTTP_MAX_WS_CLIENTS 4
 #endif // EN_HTTP || EN_HTTPS
 
 /**
