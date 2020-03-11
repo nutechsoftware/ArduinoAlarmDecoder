@@ -252,6 +252,8 @@ class AlarmDecoderParser
     // Reset the parser state machine.
     void reset_parser();
 
+    // get AD2PPState by mask create if flag is set and no match found.
+    AD2VirtualPartitionState * getAD2PState(uint32_t *mask, bool update=false);
 
     void test();
 

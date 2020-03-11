@@ -70,6 +70,55 @@ void AlarmDecoderParser::reset_parser() {
 }
 
 /**
+ * return a partition state structure by 32bit keypad/partition mask.
+ */
+AD2VirtualPartitionState * AlarmDecoderParser::getAD2PState(uint32_t *amask, bool update) {
+  // Create or return a pointer to our partition storage class.
+  AD2VirtualPartitionState *ad2ps = nullptr;
+
+  // look for an exact match.
+  if ( AD2PStates.find(*amask) == AD2PStates.end()) {
+
+    // Not found create or find a mask that has at least
+    // one bit in common and update its mask to include the new
+    // bits. System partition mask is 0 and will skip this logic.
+    if (*amask) {
+        uint32_t foundkey = *amask;
+        for (auto const& x : AD2PStates)
+        {
+          // Mask has matching bits use it instead.
+          if (x.first & *amask) {
+            ad2ps = AD2PStates[x.first];
+            foundkey = x.first;
+            break;
+          }
+        }
+
+        // Not necessary but seems reasonable.
+        // Update key to include new mask if it changed.
+        if (foundkey != *amask && update) {
+          // remove the old map entry.
+          AD2PStates.erase(foundkey);
+          // Add new one with mask of original + new.
+          *amask |= foundkey;
+          AD2PStates[*amask] = ad2ps;
+        }
+    }
+
+    // Did not find entry. Make new.
+    if (!ad2ps && update) {
+        ad2ps = AD2PStates[*amask] = new AD2VirtualPartitionState;
+        ad2ps->partition = AD2PStates.size();
+    }
+
+  } else {
+    // Found. Grab the state class ptr.
+    ad2ps = AD2PStates[*amask];
+  }
+  return ad2ps;
+}
+
+/**
  * Consume bytes from an AlarmDecoder stream into a small ring buffer
  * for processing.
  *
@@ -273,47 +322,10 @@ bool AlarmDecoderParser::put(uint8_t *buff, int8_t len) {
                 // Ademco 40000000 is keypad address 30
 
                 // Create or return a pointer to our partition storage class.
-                AD2VirtualPartitionState *ad2ps = nullptr;
+                AD2VirtualPartitionState *ad2ps = getAD2PState(&amask, true);
 
-                // look for an exact match.
-                if ( AD2PStates.find(amask) == AD2PStates.end()) {
-
-                  // Not found create or find a mask that has at least
-                  // one bit in common and update its mask to include the new
-                  // bits. System partition mask is 0 and will skip this logic.
-                  if (amask) {
-                      uint32_t foundkey = amask;
-                      for (auto const& x : AD2PStates)
-                      {
-                        // Mask has matching bits use it instead.
-                        if (x.first & amask) {
-                          ad2ps = AD2PStates[x.first];
-                          foundkey = x.first;
-                          break;
-                        }
-                      }
-
-                      // Not necessary but seems reasonable.
-                      // Update key to include new mask if it changed.
-                      if (foundkey != amask) {
-                        // remove the old map entry.
-                        AD2PStates.erase(foundkey);
-                        // Add new one with mask of original + new.
-                        amask |= foundkey;
-                        AD2PStates[amask] = ad2ps;
-                      }
-                  }
-
-                  // Did not find entry. Make new.
-                  if (!ad2ps) {
-                      ad2ps = AD2PStates[amask] = new AD2VirtualPartitionState;
-                      ad2ps->partition = AD2PStates.size();
-                  }
-
-                } else {
-                  // Found. Grab the state class ptr.
-                  ad2ps = AD2PStates[amask];
-                }
+                // we should not need to test the validity of ad2ps with update=true
+                // the function will return a value.
 
                 // store key internal for easy use.
                 ad2ps->address_mask_filter = amask;
