@@ -36,7 +36,7 @@
       <a href="#" class="control large">
         <div>
           <div class="icon house with_key"></div><br>
-          <span>STAY</span>
+          <span>HOME</span>
         </div>
       </a>
       <div class="control large has_children">
@@ -89,19 +89,23 @@
   <div style="overflow:scroll;height:300px" id="divOut">Not connected...</div>
   <script type="text/javascript">
     var panel_states =  {
-      "armed":{
-        "class":"armed",
-        "label":"Armed"
+      "unknown":{
+        "class":"not_ready",
+        "label":"Unknown"
       },
-      "armed_exit":{
+      "armed_away":{
+        "class":"armed",
+        "label":"Armed (away)"
+      },
+      "armed_away_exit":{
         "class":"armed",
         "label":"Armed (exit-now)"
       },
-      "armed_stay":{
+      "armed_home":{
         "class":"armed",
-        "label":"Armed (stay)"
+        "label":"Armed (home)"
       },
-      "armed_stay_exit":{
+      "armed_home_exit":{
         "class":"armed",
         "label":"Armed (exit-now)"
       },
@@ -130,14 +134,50 @@
         "label":"Not Ready"
       }
     }
+    panel_states.get = function(key) {
+      return (panel_states[key] ? panel_states[key] : panel_states["unknown"]);
+    }
     const elem = id => document.getElementById(id);
     const divOut = elem("divOut");
 
     class AD2ws {
       constructor() {
+          this.addressMask = 0xffffffff;
           this.connecting = false;
           this.connected = false;
           this.ws = null;
+          this.ad2emb_state = null;
+          this.mode = "unknown";
+      }
+
+      /* update UI from current state */
+      updateUI() {
+        /* test if state is valid */
+        if (!this.ad2emb_state)
+          return;
+
+        /* simple state machine for now to set status class */
+        if (this.ad2emb_state.ready) {
+          this.mode = "ready";
+        } else {
+          if (this.ad2emb_state.armed_away) {
+            // Note: append _exit if exit_now state is set
+            this.mode = "armed_away" + (this.ad2emb_state.exit_now ? "_exit" : "");
+          } else
+          if (this.ad2emb_state.armed_home) {
+            // Note: append _exit if exit_now state is set
+            this.mode = "armed_home" + (this.ad2emb_state.exit_now ? "_exit" : "");
+          } else
+          if (this.ad2emb_state.alarm_sounding) {
+            this.mode = "alarming";
+          } else {
+            this.mode = "notready";
+          }
+        }
+        var ps = panel_states.get(this.mode);
+        var statusdiv = document.getElementById("status");
+        statusdiv.className = ps.class;
+        statusdiv.getElementsByTagName("h2")[0].innerHTML = ps.label;
       }
 
       /* connect WS to AD2 IoT device. */
@@ -154,38 +194,45 @@
                   this.connecting = false;
                   this.connected = true;
                   divOut.innerHTML = "<p>Connected.</p>";
-                  this.sendMessage("hello");
+
+                  /* request the current AD2EMB AlarmDecoder state. */
+                  this.sendMessage("!SYNC:"+this.addressMask);
               };
               /* FIXME: needs more cow bell */
               this.ws.onmessage = e => {
                   console.log("onmessage. '" + e.data + "'");
-                  var myObj = JSON.parse(e.data);
-                  /* simple state machine for now to set status class */
-                  if (myObj.ready) {
-                    document.getElementById("status").className = "ready";
-                  } else {
-                    if (myObj.armed_away || myObj.armed_home) {
-                      document.getElementById("status").className = "armed";
-                    } else {
-                      if (myObj.alarm_sounding) {
-                        document.getElementById("status").className = "alarming";
-                      } else {
-                        document.getElementById("status").className = "not-ready";
-                      }
-                    }
+                  if (e.data[0] == "{") {
+                    this.ad2emb_state = JSON.parse(e.data);
                   }
+                  if (e.data[0] == "!") {
+                    // !PONG:0000000
+                  }
+                  this.updateUI();
               }
-              /* FIXME: need reconnect timer */
+              /* Reconnect on lost connecttion. */
               this.ws.onclose = e => {
                   console.log("onclose.");
                   divOut.innerHTML = "<p>Closed.</p>";
                   this.disconnect();
+                  setTimeout(function() {
+                    ad2ws.connect();
+                  }, 1000);
               }
           }
       }
 
+      /* check the ws connectino */
+      wsCheck() {
+        console.log("wsCheck");
+        this.sendMessage("!PING:"+this.addressMask);
+        if(!this.ws || this.ws.readyState === WebSocket.CLOSED) {
+          ad2ws.connect();
+        }
+      }
+
       /* FIXME: not needed? */
       disconnect() {
+          console.log("wsCheck");
           if (this.ws !== null) {
               this.sendMessage("goodbye");
               this.ws.close();
@@ -206,6 +253,7 @@
     };
     let ad2ws = new AD2ws();
     ad2ws.connect();
+    var loadingTimer = setInterval(function(){ad2ws.wsCheck();}, 15000);
   </script>
 </body>
 </html>
