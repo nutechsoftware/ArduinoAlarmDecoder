@@ -363,6 +363,24 @@ bool AlarmDecoderParser::put(uint8_t *buff, int8_t len) {
                 ad2ps->display_cursor_type = (uint8_t) strtol(msg.substring(CURSOR_TYPE_POS, CURSOR_TYPE_POS+2).c_str(), 0, 16);
                 ad2ps->display_cursor_location = (uint8_t) strtol(msg.substring(CURSOR_POS, CURSOR_POS+2).c_str(), 0, 16);
 
+                // look at messages for specific some states.
+                // FIXME: Multi language support
+                // FIXME: system messages need to be tested. They should go into
+                // partition 0 but it needs to be tested.
+                ad2ps->exit_now = false;
+                if (ad2ps->panel_type == 'A') { // Ademco Vista
+                  if(ad2ps->last_alpha_message.indexOf("MAY EXIT NOW") >= 0) {
+                    ad2ps->exit_now = true;
+                  }
+                } else
+                if (ad2ps->panel_type == 'D') { // DSC Power Series
+                  if(ad2ps->last_alpha_message.indexOf("QUICK EXIT") >= 0 ||
+                     ad2ps->last_alpha_message.indexOf("EXIT DELAY") >= 0)
+                  {
+                    ad2ps->exit_now = true;
+                  }
+                }
+
                 // FIXME: debugging / testing
                 Serial.print("!DBG: SIZE(");
                 Serial.print(AD2PStates.size());

@@ -156,6 +156,7 @@ class AD2VirtualPartitionState
   bool fire_alarm = false;
   bool system_issue = false;
   bool perimeter_only = false;
+  bool exit_now = false;
   bool system_specific = false;
   uint8_t beeps = 0;
   char panel_type = '?';
