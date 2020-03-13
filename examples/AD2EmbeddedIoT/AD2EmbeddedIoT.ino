@@ -333,6 +333,7 @@ void jsonAD2VirtualPartitionState(AD2VirtualPartitionState *s, std::string &json
   doc["fire_alarm"] = s->fire_alarm;
   doc["system_issue"] = s->system_issue;
   doc["perimeter_only"] = s->perimeter_only;
+  doc["exit_now"] = s->exit_now;
   doc["system_specific"] = s->system_specific;
   doc["beeps"] = String((char)s->beeps);
   doc["panel_type"] = String((char)s->panel_type);
@@ -928,10 +929,51 @@ void WSClientHandler::onMessage(WebsocketInputStreambuf * inbuf) {
   std::string msg;
   ss << inbuf;
   msg = ss.str();
+
+  // '!PING' ping network test.
+  if (msg.find("!PING:") == 0) {
+    for(int i = 0; i < HTTP_MAX_WS_CLIENTS; i++) {
+      if (activeWSClients[i] == this) {
+        // Send json string to the client
+        activeWSClients[i]->send("!PONG:00000000", 0x02);
+        // all done just sending to this client.
+        break;
+      }
+    }
+  }
+
+  // '!SYNC' request send current state.
+  if (msg.find("!SYNC:") == 0) {
+
+    // Get state by mask
+    uint32_t amask = atoi(msg.substr(msg.find(':') + 1).c_str());
+    AD2VirtualPartitionState *s = AD2Parse.getAD2PState(&amask);
+
+    // will return nullptr if no match is found for the mask.
+    if (s) {
+      // catpure the current state as json string
+      std::string json;
+      jsonAD2VirtualPartitionState(s, json);
+
+      for(int i = 0; i < HTTP_MAX_WS_CLIENTS; i++) {
+        if (activeWSClients[i] == this) {
+          // Send json string to the client
+          activeWSClients[i]->send(json, 0x02);
+          // all done just sending to this client.
+          break;
+        }
+      }
+    }
+  }
+
+  // '!SEND' Send message to the AD2*
+  if (msg.find("!SEND:") == 0) {
+  }
+
+  // '!RESTART' reboot!
+
   Serial.printf("!DBG:AD2EMB,WS message '%s'\n", msg.c_str());
 }
-
-
 
 /**
  * HTTP catch all.
