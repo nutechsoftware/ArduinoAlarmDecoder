@@ -369,13 +369,13 @@ bool AlarmDecoderParser::put(uint8_t *buff, int8_t len) {
                 // partition 0 but it needs to be tested.
                 ad2ps->exit_now = false;
                 if (ad2ps->panel_type == 'A') { // Ademco Vista
-                  if(ad2ps->last_alpha_message.indexOf("MAY EXIT NOW") >= 0) {
+                  if(ad2ps->last_alpha_message.indexOf("may exit now") >= 0) {
                     ad2ps->exit_now = true;
                   }
                 } else
                 if (ad2ps->panel_type == 'D') { // DSC Power Series
-                  if(ad2ps->last_alpha_message.indexOf("QUICK EXIT") >= 0 ||
-                     ad2ps->last_alpha_message.indexOf("EXIT DELAY") >= 0)
+                  if(ad2ps->last_alpha_message.indexOf("quick exit") >= 0 ||
+                     ad2ps->last_alpha_message.indexOf("exit delay") >= 0)
                   {
                     ad2ps->exit_now = true;
                   }
