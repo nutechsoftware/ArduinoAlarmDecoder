@@ -204,6 +204,10 @@ public:
 
   // Handler function on connection close
   void onClose();
+
+  // Handler function on connection errors
+  void onError(std::string error);
+
 };
 
 // Simple array to store the active web socket clients:
@@ -373,11 +377,11 @@ void setup()
 #endif // AD2_UART
 
   // start SPIFFS flash file system driver
-  Serial.print("!DBG:AD2EMB,SPIFFS Start..");
+  Serial.print("!DBG:AD2EMB,SPIFFS start ");
   if (!SPIFFS.begin(true)) {
-    Serial.println("Failed.");
+    Serial.println("fail");
   } else {
-    Serial.println("Success..");
+    Serial.println("success");
   }
 
 #if defined(EN_ETH) || defined(EN_WIFI)
@@ -527,7 +531,7 @@ void networkLoop() {
 #if defined(EN_SSDP)
     static bool ssdp_started = false;
     if (!ssdp_started) {
-      Serial.println("!DBG:SSDP starting.");
+      Serial.println("!DBG:SSDP starting");
       SSDP.begin();
       ssdp_started = true;
     }
@@ -547,13 +551,13 @@ void networkLoop() {
 #if defined(EN_HTTP)
     static bool http_started = false;
     if (!http_started) {
-      Serial.print("!DBG:HTTP server starting.");
+      Serial.print("!DBG:HTTP server start ");
       http_started = true;
       insecureServer.start();
       if (insecureServer.isRunning()) {
-        Serial.println("..running.");
+        Serial.println("success");
       } else {
-        Serial.println("..failed to start.");
+        Serial.println("fail");
       }
     } else {
       insecureServer.loop();
@@ -563,13 +567,13 @@ void networkLoop() {
 #if defined(EN_HTTPS)
     static bool https_started = false;
     if (!https_started) {
-      Serial.println("!DBG:HTTPS server starting.");
+      Serial.println("!DBG:HTTPS server start ");
       https_started = true;
       secureServer.start();
       if (secureServer.isRunning()) {
-        Serial.println("..running.");
+        Serial.println("success");
       } else {
-        Serial.println("..failed to start.");
+        Serial.println("fail");
       }
     } else {
       secureServer.loop();
@@ -794,17 +798,17 @@ bool mqttConnect() {
   bool res = true;
 
   if(!mqttClient.connected()) {
-    Serial.print("!DBG:AD2EMB,MQTT connection starting...");
+    Serial.print("!DBG:AD2EMB,MQTT connection start ");
     // Attempt to connect
     if (mqttClient.connect(mqtt_clientId.c_str(), SECRET_MQTT_USER, SECRET_MQTT_PASS)) {
-      Serial.println("connected");
+      Serial.println("success");
       // Subscribe to command input topic
       String subtopic = mqtt_root + MQTT_CMD_SUB_TOPIC;
       if (!mqttClient.subscribe(subtopic.c_str())) {
         Serial.printf("!DBG:AD2EMB,MQTT subscribe to CMD topic failed rc(%i)\n", mqttClient.state());
       }
     } else {
-      Serial.print(" failed, client.connect() rc=");
+      Serial.print(" fail, client.connect() rc=");
       Serial.println(mqttClient.state());
       res = false;
     }
@@ -915,6 +919,21 @@ WebsocketHandler * WSClientHandler::create() {
 void WSClientHandler::onClose() {
   for(int i = 0; i < HTTP_MAX_WS_CLIENTS; i++) {
     if (activeWSClients[i] == this) {
+      Serial.printf("!DBG:AD2EMB,WS close %i\n",i);
+      activeWSClients[i] = nullptr;
+      break;
+    }
+  }
+}
+
+/**
+ * Error handlers
+ */
+void WSClientHandler::onError(std::string error) {
+  Serial.printf("!DBG:AD2EMB,WS error '%s'\n",error.c_str());
+  for(int i = 0; i < HTTP_MAX_WS_CLIENTS; i++) {
+    if (activeWSClients[i] == this) {
+      Serial.printf("!DBG:AD2EMB,WS error %i\n",i);
       activeWSClients[i] = nullptr;
     }
   }
@@ -991,8 +1010,7 @@ void handleCatchAll(HTTPRequest *req, HTTPResponse *res) {
   // GET requests look for static template files
   if (req->getMethod() == "GET") {
 
-    // FIXME: Library needs a way to force browser to close connections.
-    // this does not work because library changes it later.
+    // disable any keep alive force close
     res->setHeader("Connection", "close");
 
     // Redirect / to /index.html
@@ -1092,8 +1110,7 @@ void handleCatchAll(HTTPRequest *req, HTTPResponse *res) {
     // Close the file
     file.close();
   } else {
-    // FIXME: Library needs a way to force browser to close connections.
-    // this does not work because library changes it later.
+    // disable any keep alive force close
     res->setHeader("Connection", "close");
     // discard remaining data from client
     req->discardRequestBody();
@@ -1288,8 +1305,7 @@ void handleEventUNSUBSCRIBE(HTTPRequest *req, HTTPResponse *res) {
  * WARNING: It may be invalid.
  */
 void my_ON_MESSAGE_CB(String *msg, AD2VirtualPartitionState *s) {
-  Serial.println(*msg);
-
+  Serial.printf("!DBG:ON_MESSAGE_CB: '%s'\n", msg->c_str());
   // catpure the current state as json string
   std::string json;
   jsonAD2VirtualPartitionState(s, json);
@@ -1297,6 +1313,7 @@ void my_ON_MESSAGE_CB(String *msg, AD2VirtualPartitionState *s) {
   // Send updated state to every ws client
   for(int i = 0; i < HTTP_MAX_WS_CLIENTS; i++) {
     if (activeWSClients[i] != nullptr) {
+      Serial.printf("!DBG:Send to WS %i\n",activeWSClients[i]);
       // Send json string to the client
       activeWSClients[i]->send(json, 0x02);
     }
