@@ -1,259 +1,94 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>App</title>
-  <meta charset="UTF-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <link rel="stylesheet" href="app.css">
-  <link href="https://fonts.googleapis.com/css?family=Roboto&display=swap" rel="stylesheet">
+	<title>App</title>
+	<meta charset="UTF-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+	<link rel="stylesheet" href="app.css">
+	<link href="https://fonts.googleapis.com/css?family=Roboto&display=swap" rel="stylesheet">
 </head>
 
 <body>
-  <div id="app">
-    <section id="navigation">
-      <ul>
-        <li><a href="#">Dashboard</a></li>
-        <li><a href="#">Activity</a></li>
-        <li><a href="#">Apps</a></li>
-      </ul>
-    </section>
+	<div id="app">
+		<section id="navigation">
+			<ul>
+				<li><a href="#">Dashboard</a></li>
+				<li><a href="#">Activity</a></li>
+				<li><a href="#">Apps</a></li>
+			</ul>
+		</section>
 
-    <section id="status" class="not_ready">
-      <div>
-        <span class="icon house with_lock"></span>
-        <h2>NOT READY</h2>
-      </div>
-    </section>
-
-    <section id="controls">
-      <a href="#" class="control large">
-        <div>
-          <div class="icon house with_key"></div><br>
-          <span>AWAY</span>
-        </div>
-      </a>
-      <a href="#" class="control large">
-        <div>
-          <div class="icon house with_key"></div><br>
-          <span>HOME</span>
-        </div>
-      </a>
-      <div class="control large has_children">
-        <a href="#" class="control small">
-          <div>
-            <div class="icon police"></div><br>
-            <span>PANIC</span>
-          </div>
-        </a>
-        <a href="#" class="control small">
-          <div>
-            <div class="icon fire"></div><br>
-            <span>FIRE</span>
-          </div>
-        </a>
-        <a href="#" class="control small">
-          <div>
-            <div class="icon aux"></div><br>
-            <span>AUX</span>
-          </div>
-        </a>
-        <a href="#" class="control small">
-          <div>
-            <div class="icon refresh"></div><br>
-            <span>REFRESH</span>
-          </div>
-        </a>
-      </div>
-    </section>
-
-    <section id="zones">
-      <div class="zone">
-        <a href="#"><span>12</span></a>
-      </div>
-      <div class="zone">
-        <a href="#"><span>16</span></a>
-      </div>
-      <div class="zone empty"></div>
-      <div class="zone empty"></div>
-      <div class="zone empty"></div>
-      <div class="zone empty"></div>
-      <div class="zone empty"></div>
-      <div class="zone empty"></div>
-      <div class="zone empty"></div>
-      <div class="zone empty"></div>
-      <div class="zone empty"></div>
-      <div class="zone empty"></div>
-    </section>
-  </div>
-  <div style="overflow:scroll;height:300px" id="divOut">Not connected...</div>
-  <script type="text/javascript">
-    var panel_states =  {
-      "unknown":{
-        "class":"not_ready",
-        "label":"Unknown"
-      },
-      "armed_away":{
-        "class":"armed",
-        "label":"Armed (away)"
-      },
-      "armed_away_exit":{
-        "class":"armed",
-        "label":"Armed (exit-now)"
-      },
-      "armed_home":{
-        "class":"armed",
-        "label":"Armed (home)"
-      },
-      "armed_home_exit":{
-        "class":"armed",
-        "label":"Armed (exit-now)"
-      },
-      "armed_night":{
-        "class":"armed",
-        "label":"Armed (night)"
-      },
-      "armed_night_exit":{
-        "class":"armed",
-        "label":"Armed (exit-now)"
-      },
-      "alarming":{
-        "class":"alarming",
-        "label":"Alarming!"
-      },
-      "fire":{
-        "class":"alarming",
-        "label":"Fire!"
-      },
-      "ready":{
-        "class":"ready",
-        "label":"Ready"
-      },
-      "notready":{
-        "class":"not_ready",
-        "label":"Not Ready"
-      }
-    }
-    panel_states.get = function(key) {
-      return (panel_states[key] ? panel_states[key] : panel_states["unknown"]);
-    }
-    const elem = id => document.getElementById(id);
-    const divOut = elem("divOut");
-
-    class AD2ws {
-      constructor() {
-          this.addressMask = 0xffffffff;
-          this.connecting = false;
-          this.connected = false;
-          this.ws = null;
-          this.ad2emb_state = null;
-          this.mode = "unknown";
-      }
-
-      /* update UI from current state */
-      updateUI() {
-        /* test if state is valid */
-        if (!this.ad2emb_state)
-          return;
-
-        /* simple state machine for now to set status class */
-        if (this.ad2emb_state.ready) {
-          this.mode = "ready";
-        } else {
-          if (this.ad2emb_state.armed_away) {
-            // Note: append _exit if exit_now state is set
-            this.mode = "armed_away" + (this.ad2emb_state.exit_now ? "_exit" : "");
-          } else
-          if (this.ad2emb_state.armed_home) {
-            // Note: append _exit if exit_now state is set
-            this.mode = "armed_home" + (this.ad2emb_state.exit_now ? "_exit" : "");
-          } else
-          if (this.ad2emb_state.alarm_sounding) {
-            this.mode = "alarming";
-          } else {
-            this.mode = "notready";
-          }
-        }
-        var ps = panel_states.get(this.mode);
-        var statusdiv = document.getElementById("status");
-        statusdiv.className = ps.class;
-        statusdiv.getElementsByTagName("h2")[0].innerHTML = ps.label;
-      }
-
-      /* connect WS to AD2 IoT device. */
-      connect() {
-          if (this.ws === null) {
-              console.log("Connecting.");
-              divOut.innerHTML = "<p>Connecting.</p>";
-              this.connecting = true;
-              this.ws = new WebSocket("ws://" + document.location.host + "/ad2ws");
-
-              /* FIXME: need send request for update on state */
-              this.ws.onopen = e => {
-                  console.log("onopen");
-                  this.connecting = false;
-                  this.connected = true;
-                  divOut.innerHTML = "<p>Connected.</p>";
-
-                  /* request the current AD2EMB AlarmDecoder state. */
-                  this.sendMessage("!SYNC:"+this.addressMask);
-              };
-              /* FIXME: needs more cow bell */
-              this.ws.onmessage = e => {
-                  console.log("onmessage. '" + e.data + "'");
-                  if (e.data[0] == "{") {
-                    this.ad2emb_state = JSON.parse(e.data);
-                  }
-                  if (e.data[0] == "!") {
-                    // !PONG:0000000
-                  }
-                  this.updateUI();
-              }
-              /* Reconnect on lost connecttion. */
-              this.ws.onclose = e => {
-                  console.log("onclose.");
-                  divOut.innerHTML = "<p>Closed.</p>";
-                  this.disconnect();
-                  setTimeout(function() {
-                    ad2ws.connect();
-                  }, 1000);
-              }
-          }
-      }
-
-      /* check the ws connectino */
-      wsCheck() {
-        console.log("wsCheck");
-        this.sendMessage("!PING:"+this.addressMask);
-        if(!this.ws || this.ws.readyState === WebSocket.CLOSED) {
-          ad2ws.connect();
-        }
-      }
-
-      /* FIXME: not needed? */
-      disconnect() {
-          console.log("wsCheck");
-          if (this.ws !== null) {
-              this.sendMessage("goodbye");
-              this.ws.close();
-              this.ws = null;
-          }
-          if (this.connected) {
-              this.connected = false;
-              divOut.innerHTML+="<p>Disconnected.</p>";
-          }
-      }
-
-      /* FIXME: docs on simple ws request api */
-      sendMessage(msg) {
-          if (this.ws !== null) {
-              this.ws.send(msg);
-          }
-      }
-    };
-    let ad2ws = new AD2ws();
-    ad2ws.connect();
-    var loadingTimer = setInterval(function(){ad2ws.wsCheck();}, 15000);
-  </script>
+		<div id="main">
+			<section id="status" class="ready">
+				<div>
+					<span id="status_icon" class="icon house with_lock"></span>
+					<h2 id="status_text">READY</h2>
+				</div>
+			</section>
+			<div id="controls_and_zones">
+				<section id="controls">
+					<a href="#" class="control large">
+						<div>
+							<div class="icon house with_key"></div><br>
+							<span>AWAY</span>
+						</div>
+					</a>
+					<a href="#" class="control large">
+						<div>
+							<div class="icon house with_key"></div><br>
+							<span>STAY</span>
+						</div>
+					</a>
+					<div class="control large has_children">
+						<a href="#" class="control small">
+							<div>
+								<div class="icon police"></div><br>
+								<span>PANIC</span>
+							</div>
+						</a>
+						<a href="#" class="control small">
+							<div>
+								<div class="icon fire"></div><br>
+								<span>FIRE</span>
+							</div>
+						</a>
+						<a href="#" class="control small tap_1 tap_2">
+							<div>
+								<div class="icon aux"></div><br>
+								<span>AUX</span>
+							</div>
+						</a>
+						<a href="#" class="control small">
+							<div>
+								<div class="icon refresh"></div><br>
+								<span>REFRESH</span>
+							</div>
+						</a>
+					</div>
+				</section>
+				<section id="zones">
+					<div class="zone">
+						<a href="#"><span>12</span></a>
+					</div>
+					<div class="zone">
+						<a href="#"><span>16</span></a>
+					</div>
+					<div class="zone empty"></div>
+					<div class="zone empty"></div>
+					<div class="zone empty"></div>
+					<div class="zone empty"></div>
+					<div class="zone empty"></div>
+					<div class="zone empty"></div>
+					<div class="zone empty"></div>
+					<div class="zone empty"></div>
+					<div class="zone empty"></div>
+					<div class="zone empty"></div>
+				</section>
+			</div>
+		</div>
+	</div>
+  <div style="overflow:scroll;height:30px" id="divOut">Not connected...</div>
 </body>
+<script src="app.js"></script>
 </html>

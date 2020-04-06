@@ -9,6 +9,10 @@ body {
   max-width: 600px;
   margin: 0 auto;
 }
+#main {
+  display: flex;
+  flex-direction: column;
+}
 .icon {
   width: 60px;
   height: 60px;
@@ -31,6 +35,7 @@ body {
   left: 50%;
   transform: translate(-50%, -50%);
   background-size: contain;
+  background-repeat: no-repeat;
   background-position: center center;
 }
 .icon.house.with_key:after {
@@ -45,6 +50,14 @@ body {
   margin-top: 5%;
 }
 .icon.house.with_walker:after {
+  width: 50%;
+  height: 50%;
+  margin-top: 12%;
+  margin-left: 12%;
+  content: ' ';
+  background-image: url("assets/walk.svg");
+}
+.icon.house.with_family:after {
   width: 50%;
   height: 50%;
   margin-top: 12%;
@@ -153,9 +166,18 @@ body {
   left: 50%;
   transform: translate(-50%, -50%);
 }
+#controls .control.tap_1 {
+  background-color: #ffb94a;
+  border-color: #ffa008;
+}
+#controls .control.tap_2 {
+  background-color: #ffc3c2;
+  border-color: #ce0300;
+}
 #controls .control.large {
   width: calc(33.33% - 6px);
-  font-size: 30px;
+  font-size: 16px;
+  /*font-size: 30px;*/
 }
 #controls .control.large:after {
   display: block;
@@ -180,7 +202,8 @@ body {
 }
 #controls .control.small {
   width: calc(50% - 6px);
-  font-size: 12px;
+  /*font-size: 12px;*/
+  font-size: 9px;
 }
 #controls .control.small:after {
   display: block;
@@ -188,8 +211,8 @@ body {
   padding-top: 100%;
 }
 #controls .control.small .icon {
-  width: 35px;
-  height: 35px;
+  width: 30px;
+  height: 30px;
   margin-bottom: -7px;
   opacity: 0.3;
 }
@@ -243,7 +266,8 @@ body {
 #zones .zone > a {
   background-color: #f00;
   color: #fff;
-  font-size: 40px;
+  /*font-size: 40px;*/
+  font-size: 20px;
   font-weight: bold;
   border-radius: 100%;
   position: relative;
@@ -264,4 +288,26 @@ body {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
+}
+@media (orientation: landscape) {
+  #app {
+    max-width: 100%;
+  }
+  #main {
+    display: flex;
+    flex-direction: row;
+  }
+  #status {
+    height: 350px;
+    width: 50%;
+  }
+  #controls_and_zones {
+    padding-left: 15px;
+    width: 50%;
+    display: flex;
+    flex-direction: column;
+  }
+  #zones {
+    border-left: 1px solid #eee;
+  }
 }
