@@ -428,37 +428,37 @@ void setup()
 #endif // EN_SSDP
 
 #if defined(EN_HTTP) || defined(EN_HTTPS)
-  ResourceNode * nodeCatchAll = new ResourceNode("", "", &handleCatchAll);
 #if defined(EN_REST)
-  ResourceNode * nodeEventSUBSCRIBE = new ResourceNode(HTTP_API_BASE "/event", "SUBSCRIBE", &handleEventSUBSCRIBE);
-  ResourceNode * nodeEventUNSUBSCRIBE = new ResourceNode(HTTP_API_BASE "/event", "UNSUBSCRIBE", &handleEventUNSUBSCRIBE);
-#endif // EN_REST
-#if defined(EN_HTTP)
   WebsocketNode * ad2wsNode = new WebsocketNode("/ad2ws", &WSClientHandler::create);
+  ResourceNode * nodeEventSUBSCRIBE = new ResourceNode(HTTP_API_BASE "/event", "POST", &handleEventSUBSCRIBE);
+  ResourceNode * nodeEventUNSUBSCRIBE = new ResourceNode(HTTP_API_BASE "/event", "DELETE", &handleEventUNSUBSCRIBE);
+#endif // EN_REST
+  ResourceNode * nodeCatchAll = new ResourceNode("", "", &handleCatchAll);
+#if defined(EN_HTTP)
+#if defined(EN_REST)
+  insecureServer.registerNode(nodeEventSUBSCRIBE);
+  insecureServer.registerNode(nodeEventUNSUBSCRIBE);
+#endif // EN_REST
+  insecureServer.setDefaultNode(nodeCatchAll);
   insecureServer.registerNode(ad2wsNode);
   insecureServer.setDefaultHeader("Server", BASE_HOST_NAME "/" BASE_HOST_VERSION);
   insecureServer.setDefaultHeader("Cache-Control", "no-cache, no-store, must-revalidate, private");
   insecureServer.setDefaultHeader("Pragma", "no-cache");
   insecureServer.setDefaultHeader("X-XSS-Protection", "1; mode=block");
   insecureServer.setDefaultHeader("X-Frame-Options", "SAMEORIGIN");
-  insecureServer.setDefaultNode(nodeCatchAll);
+#endif // EN_HTTP
+#if defined(EN_HTTPS)
 #if defined(EN_REST)
   insecureServer.registerNode(nodeEventSUBSCRIBE);
   insecureServer.registerNode(nodeEventUNSUBSCRIBE);
 #endif // EN_REST
-#endif // EN_HTTP
-#if defined(EN_HTTPS)
+  secureServer.setDefaultNode(nodeCatchAll);
   secureServer.registerNode(ad2wsNode);
   secureServer.setDefaultHeader("Server", BASE_HOST_NAME "/" BASE_HOST_VERSION);
   secureServer.setDefaultHeader("Cache-Control", "no-cache, no-store, must-revalidate, private");
   secureServer.setDefaultHeader("Pragma", "no-cache");
   secureServer.setDefaultHeader("X-XSS-Protection", "1; mode=block");
   secureServer.setDefaultHeader("X-Frame-Options", "SAMEORIGIN");
-  secureServer.setDefaultNode(nodeCatchAll);
-#if defined(EN_REST)
-  secureServer.registerNode(nodeDeviceDescription);
-  secureServer.registerNode(nodeServiceDescription);
-#endif // EN_REST
 #endif // EN_HTTPS
 #endif // EN_HTTP || EN_HTTPS
 
@@ -479,7 +479,7 @@ void loop()
   time_now = micros();
   // delay exception tracking
   if (time_laps > 100000) {
-     Serial.printf("!DBG:AD2EMB,TLAPS EXCEPTION A: %lu\n", time_laps);
+     Serial.printf("!DBG:AD2EMB,TLAPS EXCEPTION A: %lu\r\n", time_laps);
   }
 
   // AD2* message processing
@@ -618,7 +618,6 @@ void ad2Loop() {
 #if defined(AD2_UART)
   // Read any data from the AD2* device echo to the HOST uart and parse it.
   while ((len = Serial2.available())>0) {
-
     // avoid consuming more than our storage.
     if (len > sizeof(buff)) {
       len = sizeof(buff);
@@ -788,7 +787,7 @@ void mqttSetup() {
  * MQTT message callback
  */
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
-  Serial.printf("!DBG:AD2EMB,MQTT RX topic: '%s' payload: '%.*s'\n", topic, length, payload);
+  Serial.printf("!DBG:AD2EMB,MQTT RX topic: '%s' payload: '%.*s'\r\n", topic, length, payload);
 }
 
 /**
@@ -805,7 +804,7 @@ bool mqttConnect() {
       // Subscribe to command input topic
       String subtopic = mqtt_root + MQTT_CMD_SUB_TOPIC;
       if (!mqttClient.subscribe(subtopic.c_str())) {
-        Serial.printf("!DBG:AD2EMB,MQTT subscribe to CMD topic failed rc(%i)\n", mqttClient.state());
+        Serial.printf("!DBG:AD2EMB,MQTT subscribe to CMD topic failed rc(%i)\r\n", mqttClient.state());
       }
     } else {
       Serial.print(" fail, client.connect() rc=");
@@ -835,14 +834,15 @@ void mqttLoop() {
     if (!mqttClient.connected()) {
       mqtt_signon_sent = 0;
       if (!mqtt_reconnect_delay) {
-        Serial.printf("!DBG:AD2EMB,MQTT connection closed rc(%i) reconnect delay starting\n", mqttClient.state());
+        Serial.printf("!DBG:AD2EMB,MQTT connection closed rc(%i) reconnect delay starting\r\n", mqttClient.state());
         mqtt_reconnect_delay = MQTT_CONNECT_RETRY_INTERVAL;
       } else {
         mqtt_reconnect_delay -= time_laps;
         if (mqtt_reconnect_delay<=0){
           mqtt_reconnect_delay=0;
           if (!mqttConnect()) {
-            mqtt_reconnect_delay = MQTT_CONNECT_RETRY_INTERVAL;
+            // pad the delay with the time it took to get here in this loop cycle.
+            mqtt_reconnect_delay = MQTT_CONNECT_RETRY_INTERVAL + (micros() - time_now);
           }
         }
         if (mqttClient.connected()) {
@@ -855,7 +855,7 @@ void mqttLoop() {
         Serial.println("!DBG:AD2EMB,MQTT publish AD2LRR:TEST");
         String pubtopic = mqtt_root + MQTT_LRR_PUB_TOPIC;
         if (!mqttClient.publish(pubtopic.c_str(), "!LRR:008,1,CID_3998,ff")) {
-          Serial.printf("!DBG:AD2EMB,MQTT publish TEST fail rc(%i)\n", mqttClient.state());
+          Serial.printf("!DBG:AD2EMB,MQTT publish TEST fail rc(%i)\r\n", mqttClient.state());
         }
         mqtt_signon_sent = 1;
       }
@@ -867,13 +867,13 @@ void mqttLoop() {
         Serial.println("!DBG:AD2EMB,MQTT publish AD2EMB-PING:PING");
         String pubtopic = mqtt_root + MQTT_PING_PUB_TOPIC;
         if (!mqttClient.publish(pubtopic.c_str(), mqtt_clientId.c_str())) {
-          Serial.printf("!DBG:AD2EMB,MQTT publish PING fail rc(%i)\n", mqttClient.state());
+          Serial.printf("!DBG:AD2EMB,MQTT publish PING fail rc(%i)\r\n", mqttClient.state());
         }
         mqtt_ping_delay = MQTT_CONNECT_PING_INTERVAL;
       }
     }
     if (mqtt_ping_delay > MQTT_CONNECT_PING_INTERVAL || mqtt_ping_delay < 0) {
-      Serial.printf("!DBG:AD2EMB,TLAPS EXCEPTION B: %lu\n", mqtt_ping_delay);
+      Serial.printf("!DBG:AD2EMB,TLAPS EXCEPTION B: %lu\r\n", mqtt_ping_delay);
     }
 }
 #endif // EN_MQTT_CLIENT
@@ -902,7 +902,7 @@ String getContentType(String filename) {
  * Create and track handlers for each client.
  */
 WebsocketHandler * WSClientHandler::create() {
-  Serial.printf("!DBG:AD2EMB,WS new client\n");
+  Serial.printf("!DBG:AD2EMB,WS new client\r\n");
   WSClientHandler * handler = new WSClientHandler();
   for(int i = 0; i < HTTP_MAX_WS_CLIENTS; i++) {
     if (activeWSClients[i] == nullptr) {
@@ -919,7 +919,7 @@ WebsocketHandler * WSClientHandler::create() {
 void WSClientHandler::onClose() {
   for(int i = 0; i < HTTP_MAX_WS_CLIENTS; i++) {
     if (activeWSClients[i] == this) {
-      Serial.printf("!DBG:AD2EMB,WS close %i\n",i);
+      Serial.printf("!DBG:AD2EMB,WS close %i\r\n",i);
       activeWSClients[i] = nullptr;
       break;
     }
@@ -930,10 +930,10 @@ void WSClientHandler::onClose() {
  * Error handlers
  */
 void WSClientHandler::onError(std::string error) {
-  Serial.printf("!DBG:AD2EMB,WS error '%s'\n",error.c_str());
+  Serial.printf("!DBG:AD2EMB,WS error '%s'\r\n",error.c_str());
   for(int i = 0; i < HTTP_MAX_WS_CLIENTS; i++) {
     if (activeWSClients[i] == this) {
-      Serial.printf("!DBG:AD2EMB,WS error %i\n",i);
+      Serial.printf("!DBG:AD2EMB,WS error %i\r\n",i);
       activeWSClients[i] = nullptr;
     }
   }
@@ -991,7 +991,7 @@ void WSClientHandler::onMessage(WebsocketInputStreambuf * inbuf) {
 
   // '!RESTART' reboot!
 
-  Serial.printf("!DBG:AD2EMB,WS message '%s'\n", msg.c_str());
+  Serial.printf("!DBG:AD2EMB,WS message '%s'\r\n", msg.c_str());
 }
 
 /**
@@ -1021,7 +1021,7 @@ void handleCatchAll(HTTPRequest *req, HTTPResponse *res) {
 
     // Check if same file with gz exist
     if (SPIFFS.exists(filename+".gz")) {
-      Serial.printf("!DBG:AD2EMB,SPIFFS '%s.gz' found\n", filename.c_str());
+      Serial.printf("!DBG:AD2EMB,SPIFFS '%s.gz' found\r\n", filename.c_str());
       // set content type
       res->setHeader("Content-Type", getContentType(filename).c_str());
 
@@ -1030,7 +1030,7 @@ void handleCatchAll(HTTPRequest *req, HTTPResponse *res) {
     } else
     // Check if _NOT_ exists swap for 404.html
     if (!SPIFFS.exists(filename.c_str())) {
-      Serial.printf("!DBG:AD2EMB,SPIFFS file not found '%s'\n", filename.c_str());
+      Serial.printf("!DBG:AD2EMB,SPIFFS file not found '%s'\r\n", filename.c_str());
       filename = FS_PUBLIC_PATH "/404.html";
       res->setStatusCode(404);
       res->setStatusText("Not found");
@@ -1041,12 +1041,12 @@ void handleCatchAll(HTTPRequest *req, HTTPResponse *res) {
     // Check if a flag file with the same name with .tpl extension exist.
     String tpl = filename+".tpl";
     if (!apply_gzip && SPIFFS.exists(tpl)) {
-      Serial.printf("!DBG:AD2EMB,SPIFFS '%s' found\n", tpl.c_str());
+      Serial.printf("!DBG:AD2EMB,SPIFFS '%s' found\r\n", tpl.c_str());
       // set content type
       res->setHeader("Content-Type", getContentType(filename).c_str());
       apply_template = true;
     } else {
-      Serial.printf("!DBG:AD2EMB,SPIFFS '%s' not found\n", tpl.c_str());
+      Serial.printf("!DBG:AD2EMB,SPIFFS '%s' not found\r\n", tpl.c_str());
     }
 
     // Open the file
@@ -1058,7 +1058,7 @@ void handleCatchAll(HTTPRequest *req, HTTPResponse *res) {
     // FIXME: add function will use it more than 1 time.
     // apply template if set
     if (apply_template) {
-      Serial.printf("!DBG:AD2EMB,SPIFFS applying template to file '%s'\n", filename.c_str());
+      Serial.printf("!DBG:AD2EMB,SPIFFS applying template to file '%s'\r\n", filename.c_str());
 
       // build standard template values FIXME: function dynamic.
       String szVersion = "1.0";
@@ -1093,7 +1093,7 @@ void handleCatchAll(HTTPRequest *req, HTTPResponse *res) {
       }
       engine.end();
     } else {
-      Serial.printf("!DBG:AD2EMB,SPIFFS spool raw file '%s'\n", filename.c_str());
+      Serial.printf("!DBG:AD2EMB,SPIFFS spool raw file '%s'\r\n", filename.c_str());
       // set content type
       res->setHeader("Content-Type", getContentType(filename).c_str());
       // Set length if not a template but actual file.
@@ -1129,10 +1129,13 @@ bool checkAPIKey(HTTPRequest *req, HTTPResponse *res) {
     ret = false;
     // discard remaining data from client
     req->discardRequestBody();
-    // Send "405 Method not allowed" as response
+    // Send "401 Unauthorized" as response
+    StaticJsonDocument<200> doc;
+    doc["error"]["code"] = 401;
+    doc["error"]["message"] = "Not authorized (Invalid key)";
     res->setStatusCode(401);
     res->setStatusText("Unauthorized");
-    res->println("401 Unauthorized");
+    res->println(doc.as<String>());
   }
   return ret;
 }
@@ -1148,7 +1151,7 @@ enum SSDP_RES { SSDP_UPDATED = 1, SSDP_ADDED = 0, SSDP_NO_SLOTS = -1, SSDP_NOT_F
  *    -1: fail no slots
  *    -2: delete not found
  */
-int8_t addSubscriber(HTTPRequest *req, int8_t *idx) {
+int8_t updateSubscriber(HTTPRequest *req, int8_t *idx) {
   int8_t ret = 0;
 
   // get key subscribe headers for searching
@@ -1174,7 +1177,7 @@ int8_t addSubscriber(HTTPRequest *req, int8_t *idx) {
     }
   }
 
-  // build the exire time value
+  // build the expire time value
   String tkey;
   uint32_t tval = 0;
   if (_timeout.length()) {
@@ -1229,7 +1232,7 @@ int8_t addSubscriber(HTTPRequest *req, int8_t *idx) {
  * Free contents of subscriber
  */
 void freeSubscriberLOC(uint8_t loc) {
-  Serial.printf("!DBG:AD2EMB,SSDP freeSubscriberLOC loc(%i) uuid(%s)\n", loc, rest_subscribers[loc]->uuid->c_str());
+  Serial.printf("!DBG:AD2EMB,SSDP freeSubscriberLOC loc(%i) uuid(%s)\r\n", loc, rest_subscribers[loc]->uuid->c_str());
   if (rest_subscribers[loc]->host)
     delete rest_subscribers[loc]->host;
   if (rest_subscribers[loc]->callback)
@@ -1254,12 +1257,12 @@ void handleEventSUBSCRIBE(HTTPRequest *req, HTTPResponse *res) {
     return;
   }
 
-  if ((rc = addSubscriber(req, &idx)) > -1) {
+  if ((rc = updateSubscriber(req, &idx)) > -1) {
     // Success
-    Serial.printf("!DBG:AD2EMB,SSDP addSubscribe pass rc(%i) idx(%i) uuid(%s)\n", rc, idx, rest_subscribers[idx]->uuid->c_str());
+    Serial.printf("!DBG:AD2EMB,SSDP updateSubscribe pass rc(%i) idx(%i) uuid(%s)\r\n", rc, idx, rest_subscribers[idx]->uuid->c_str());
   } else {
     // Printf error
-    Serial.printf("!DBG:AD2EMB,SSDP addSubscribe fail rc(%i) idx(%i)\n", rc, idx);
+    Serial.printf("!DBG:AD2EMB,SSDP updateSubscribe fail rc(%i) idx(%i)\r\n", rc, idx);
     // discard remaining data from client
     req->discardRequestBody();
     // We could not store the subscriber, no free slot.
@@ -1277,12 +1280,12 @@ void handleEventUNSUBSCRIBE(HTTPRequest *req, HTTPResponse *res) {
   res->setHeader("Content-Type", "text/xml");
 
   int8_t rc = -1, idx = -1; // idx = -1 to remove if found
-  if ((rc = addSubscriber(req, &idx)) > -1) {
+  if ((rc = updateSubscriber(req, &idx)) > -1) {
     // Success
-    Serial.printf("!DBG:AD2EMB,SSDP addSubscribe delete pass rc(%i)\n", rc);
+    Serial.printf("!DBG:AD2EMB,SSDP updateSubscribe delete pass rc(%i)\r\n", rc);
   } else {
     // Printf error
-    Serial.printf("!DBG:AD2EMB,SSDP addSubscribe delete fail rc(%i)\n", rc);
+    Serial.printf("!DBG:AD2EMB,SSDP updateSubscribe delete fail rc(%i)\r\n", rc);
     // We could not find subscriber slot.
     res->setStatusCode(409);
     res->setStatusText("Application not subscribed to event source");
@@ -1305,7 +1308,7 @@ void handleEventUNSUBSCRIBE(HTTPRequest *req, HTTPResponse *res) {
  * WARNING: It may be invalid.
  */
 void my_ON_MESSAGE_CB(String *msg, AD2VirtualPartitionState *s) {
-  Serial.printf("!DBG:ON_MESSAGE_CB: '%s'\n", msg->c_str());
+  Serial.printf("!DBG:ON_MESSAGE_CB: '%s'\r\n", msg->c_str());
   // catpure the current state as json string
   std::string json;
   jsonAD2VirtualPartitionState(s, json);
@@ -1313,7 +1316,7 @@ void my_ON_MESSAGE_CB(String *msg, AD2VirtualPartitionState *s) {
   // Send updated state to every ws client
   for(int i = 0; i < HTTP_MAX_WS_CLIENTS; i++) {
     if (activeWSClients[i] != nullptr) {
-      Serial.printf("!DBG:Send to WS %i\n",activeWSClients[i]);
+      Serial.printf("!DBG:Send to WS %i\r\n",activeWSClients[i]);
       // Send json string to the client
       activeWSClients[i]->send(json, 0x02);
     }
