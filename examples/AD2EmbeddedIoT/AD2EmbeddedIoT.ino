@@ -854,6 +854,8 @@ void mqttLoop() {
       if (!mqtt_signon_sent) {
         Serial.println("!DBG:AD2EMB,MQTT publish AD2LRR:TEST");
         String pubtopic = mqtt_root + MQTT_LRR_PUB_TOPIC;
+        // Contact ID #998 is being used for testing. AFAIK it is not used by anyone else.
+        // This will be used for SIGNON notification.
         if (!mqttClient.publish(pubtopic.c_str(), "!LRR:008,1,CID_3998,ff")) {
           Serial.printf("!DBG:AD2EMB,MQTT publish TEST fail rc(%i)\r\n", mqttClient.state());
         }
@@ -1329,5 +1331,11 @@ void my_ON_MESSAGE_CB(String *msg, AD2VirtualPartitionState *s) {
  * WARNING: It may be invalid.
  */
 void my_ON_LRR_CB(String *msg, AD2VirtualPartitionState *s) {
+  String pubtopic = mqtt_root + MQTT_LRR_PUB_TOPIC;
+  if (!mqttClient.publish(pubtopic.c_str(), msg->c_str())) {
+    Serial.printf("!DBG:AD2EMB,MQTT publish LRR fail rc(%i)\r\n", mqttClient.state());
+  } else {
+    Serial.printf("!DBG:AD2EMB,MQTT publish LRR success\r\n");    
+  }
   Serial.println(*msg);
 }
