@@ -354,6 +354,10 @@ void jsonAD2VirtualPartitionState(AD2VirtualPartitionState *s, std::string &json
  */
 void setup()
 {
+  // As soon as possile pull up on TX/RX UART lines to prevent noise.
+  pinMode(AD2_TX, INPUT_PULLUP);
+  pinMode(AD2_RX, INPUT_PULLUP);
+
   // small delay on startup
   delay(5000);
 
