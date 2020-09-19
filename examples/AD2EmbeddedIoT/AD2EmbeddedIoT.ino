@@ -378,6 +378,11 @@ void setup()
   // normal messages from AD2 on Vista 50PUL panel with one partition.
   // If any loop() method is busy too long alarm panel state data will be lost.
   Serial2.setRxBufferSize(2048);
+  // A small chance of corruption on serial line exists during 
+  // the initial flashing of the ESP32. Just in case force AD2
+  // into run mode by forcing it out of any potential input states.
+  for (int cl=0; cl<20 ; cl++)
+    Serial2.write("\r\n");
 #endif // AD2_UART
 
   // start SPIFFS flash file system driver
