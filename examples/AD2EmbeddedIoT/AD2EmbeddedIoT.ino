@@ -372,6 +372,8 @@ void setup()
 
 #if defined(AD2_UART)
   // Open AlarmDecoder UART
+  // Use 4.7k PULLUP resistors on TX/RX lines to avoid issues during ESP32 booting.
+  // Also a good idea to use small 40ohm ripple and current limit resistors.
   Serial2.begin(AD2_BAUD, SERIAL_8N1, AD2_TX, AD2_RX);
   // The ESP32 uart driver has its own interrupt and buffers for processing
   // rx bytes. Give it plenty of space. 1024 gave about 1 minute storage of
