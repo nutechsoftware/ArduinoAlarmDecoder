@@ -122,7 +122,7 @@
  * Base settings tests.
  */
 #if defined(EN_ETH) + defined(EN_WIFI) == 0
-#error Must define at least one network interface
+#warning No network interface defined
 #endif
 
 /**
@@ -162,9 +162,6 @@ String mqtt_clientId;
 String mqtt_root;
 #endif // EN_MQTT_CLIENT
 
-// REST service
-#if defined(EN_REST)
-
 /**
  * We use JSON as data format. Make sure to have the lib available
  * arduinojson library v6.14.1 by Benoît Blanchon
@@ -172,6 +169,9 @@ String mqtt_root;
  * https://github.com/bblanchon/ArduinoJson
  */
 #include <ArduinoJson.h>
+
+// REST service
+#if defined(EN_REST)
 
 // subscriber storage structure
 typedef struct {
@@ -358,7 +358,7 @@ void setup()
   delay(5000);
 
   // Open host UART
-  Serial.begin(115200);
+  Serial.begin(AD2_BAUD);
   Serial.println();
   Serial.println("!DBG:AD2EMB,Starting");
 #if defined(DEBUG)
@@ -481,6 +481,17 @@ void loop()
   if (time_laps > 100000) {
      Serial.printf("!DBG:AD2EMB,TLAPS EXCEPTION A: %lu\r\n", time_laps);
   }
+
+// #define TEST_UART
+// Test UARTS relay between UART0 and UART1
+#ifdef TEST_UART
+  while (Serial2.available()) {
+    Serial.print(char(Serial2.read()));
+  }
+  while (Serial.available()) {
+    Serial2.print(char(Serial.read()));
+  }
+#endif
 
   // AD2* message processing
   ad2Loop();
@@ -640,6 +651,7 @@ void ad2Loop() {
   while (Serial.available()>0) {
     int res = Serial.read();
     if (res > -1) {
+      Serial.printf("sending %c to AD2*\r\n",res);
 #if defined(AD2_UART)
       Serial2.write((uint8_t)res);
 #endif
@@ -652,6 +664,7 @@ void ad2Loop() {
 /**
  * WIFI / Ethernet state event handler
  */
+#if defined(EN_ETH) || defined(EN_WIFI)
 void networkEvent(WiFiEvent_t event)
 {
   switch (event) {
@@ -716,6 +729,7 @@ void networkEvent(WiFiEvent_t event)
       break;
   }
 }
+#endif // WIFI | ETH
 
 /**
  * If wifi or network drop close all outbound connections.
@@ -1315,6 +1329,7 @@ void my_ON_MESSAGE_CB(String *msg, AD2VirtualPartitionState *s) {
   std::string json;
   jsonAD2VirtualPartitionState(s, json);
 
+#if defined(EN_HTTP) || defined(EN_HTTPS)
   // Send updated state to every ws client
   for(int i = 0; i < HTTP_MAX_WS_CLIENTS; i++) {
     if (activeWSClients[i] != nullptr) {
@@ -1323,6 +1338,7 @@ void my_ON_MESSAGE_CB(String *msg, AD2VirtualPartitionState *s) {
       activeWSClients[i]->send(json, 0x02);
     }
   }
+#endif
 }
 
 /**
@@ -1331,11 +1347,13 @@ void my_ON_MESSAGE_CB(String *msg, AD2VirtualPartitionState *s) {
  * WARNING: It may be invalid.
  */
 void my_ON_LRR_CB(String *msg, AD2VirtualPartitionState *s) {
+#if defined(EN_MQTT_CLIENT)
   String pubtopic = mqtt_root + MQTT_LRR_PUB_TOPIC;
   if (!mqttClient.publish(pubtopic.c_str(), msg->c_str())) {
     Serial.printf("!DBG:AD2EMB,MQTT publish LRR fail rc(%i)\r\n", mqttClient.state());
   } else {
     Serial.printf("!DBG:AD2EMB,MQTT publish LRR success\r\n");    
   }
+#endif
   Serial.println(*msg);
 }

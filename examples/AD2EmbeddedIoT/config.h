@@ -44,6 +44,14 @@ IPAddress dhcp_fail_gw(169,254,0,1);
  * FIXME: needs design work.
  */
 #define HW_ESP32_EVB_EA
+/*
+ * Some ESP32 boards including the ESP32_EVB revision F need a 10uf cap between
+ * * ESP_EN(EXT1:33) and GND(EXT1:34) or flashing errors happen even
+ * with Linux kernel > 5.5 and updated ch341 kernel driver.
+ * https://randomnerdtutorials.com/solved-failed-to-connect-to-esp32-timed-out-waiting-for-packet-header/
+ *
+ * SM: Tested with 4.7uf no issues with 921,600baud with no issues.
+ */
 
 //#define HW_ESP32_TTGO_TBEAM10
 //#define HW_ESP32_THING
@@ -52,7 +60,7 @@ IPAddress dhcp_fail_gw(169,254,0,1);
 // Connect the AD2* TX PIN to ESP32 RX PIN and AD2* RX PIN to ESP32 TX PIN
 #if defined(HW_ESP32_EVB_EA)
  // Use UART2 on ESP32
- //#define USE_ESP32_UART2
+ #define USE_ESP32_UART2
  #ifndef USE_ESP32_UART2
   #warning Using ESP32 software uart on AD2TX->UEXT:RXD(4):GPIO4 UEXT:TXD(3):GPIO36->AD2RX
   // UEXT TXD(3)/RXD(4) are on not connected to the ESP32 hardware UART.
