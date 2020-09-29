@@ -474,6 +474,7 @@ void setup()
 #endif // EN_HTTP || EN_HTTPS
 
   // AlarmDecoder wiring.
+  AD2Parse.setCB_ON_RAW_MESSAGE(my_ON_RAW_MESSAGE_CB);
   AD2Parse.setCB_ON_MESSAGE(my_ON_MESSAGE_CB);
   AD2Parse.setCB_ON_LRR(my_ON_LRR_CB);
 }
@@ -1328,6 +1329,15 @@ void handleEventUNSUBSCRIBE(HTTPRequest *req, HTTPResponse *res) {
  * When a complete messages is received or a specific stream of
  * bytes is received event(s) will be called.
  */
+
+/**
+ * ON_RAW_MESSAGE
+ * When a full standard alarm state message is received before it is parsed.
+ * WARNING: It may be invalid.
+ */
+void my_ON_RAW_MESSAGE_CB(String *msg, AD2VirtualPartitionState *s) {
+  Serial.printf("!DBG:ON_RAW_MESSAGE_CB: '%s'\r\n", msg->c_str());
+}
 
 /**
  * ON_MESSAGE
