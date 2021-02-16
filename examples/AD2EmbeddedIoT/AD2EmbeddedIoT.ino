@@ -324,7 +324,7 @@ void jsonAD2VirtualPartitionState(AD2VirtualPartitionState *s, std::string &json
   doc["display_cursor_location"] = s->display_cursor_location;
   doc["ready"] = s->ready;
   doc["armed_away"] = s->armed_away;
-  doc["armed_home"] = s->armed_home;
+  doc["armed_stay"] = s->armed_stay;
   doc["backlight_on"] = s->backlight_on;
   doc["programming_mode"] = s->programming_mode;
   doc["zone_bypassed"] = s->zone_bypassed;
@@ -474,9 +474,9 @@ void setup()
 #endif // EN_HTTP || EN_HTTPS
 
   // AlarmDecoder wiring.
-  AD2Parse.setCB_ON_RAW_MESSAGE(my_ON_RAW_MESSAGE_CB);
-  AD2Parse.setCB_ON_MESSAGE(my_ON_MESSAGE_CB);
-  AD2Parse.setCB_ON_LRR(my_ON_LRR_CB);
+  AD2Parse.subscribeTo(ON_RAW_MESSAGE, my_ON_RAW_MESSAGE_CB, nullptr);
+  AD2Parse.subscribeTo(ON_MESSAGE, my_ON_MESSAGE_CB, nullptr);
+  AD2Parse.subscribeTo(ON_LRR, my_ON_LRR_CB, nullptr);
 }
 
 /**
@@ -1335,7 +1335,7 @@ void handleEventUNSUBSCRIBE(HTTPRequest *req, HTTPResponse *res) {
  * When a full standard alarm state message is received before it is parsed.
  * WARNING: It may be invalid.
  */
-void my_ON_RAW_MESSAGE_CB(String *msg, AD2VirtualPartitionState *s) {
+void my_ON_RAW_MESSAGE_CB(std::string *msg, AD2VirtualPartitionState *s, void *arg) {
   Serial.printf("!DBG:ON_RAW_MESSAGE_CB: '%s'\r\n", msg->c_str());
 }
 
@@ -1344,7 +1344,7 @@ void my_ON_RAW_MESSAGE_CB(String *msg, AD2VirtualPartitionState *s) {
  * When a full standard alarm state message is received before it is parsed.
  * WARNING: It may be invalid.
  */
-void my_ON_MESSAGE_CB(String *msg, AD2VirtualPartitionState *s) {
+void my_ON_MESSAGE_CB(std::string *msg, AD2VirtualPartitionState *s, void * arg) {
   Serial.printf("!DBG:ON_MESSAGE_CB: '%s'\r\n", msg->c_str());
   // catpure the current state as json string
   std::string json;
@@ -1367,7 +1367,7 @@ void my_ON_MESSAGE_CB(String *msg, AD2VirtualPartitionState *s) {
  * When a LRR message is received.
  * WARNING: It may be invalid.
  */
-void my_ON_LRR_CB(String *msg, AD2VirtualPartitionState *s) {
+void my_ON_LRR_CB(std::string *msg, AD2VirtualPartitionState *s, void * arg) {
 #if defined(EN_MQTT_CLIENT)
   String pubtopic = mqtt_root + MQTT_LRR_PUB_TOPIC;
   if (!mqttClient.publish(pubtopic.c_str(), msg->c_str())) {
@@ -1376,5 +1376,5 @@ void my_ON_LRR_CB(String *msg, AD2VirtualPartitionState *s) {
     Serial.printf("!DBG:AD2EMB,MQTT publish LRR success\r\n");    
   }
 #endif
-  Serial.println(*msg);
+  Serial.println(msg->c_str());
 }
